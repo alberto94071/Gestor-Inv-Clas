@@ -1,0 +1,10 @@
+# Carpetas de dependencias
+node_modules/
+
+# Archivo de configuración sensible (¡CRÍTICO!)
+.env
+
+# Logs y cachés de npm/yarn
+npm-debug.log*
+yarn-error.log
+.DS_Store
