@@ -5,7 +5,7 @@ import axios from 'axios';
 const API = axios.create({
   // 🛑 CRÍTICO: Asegúrate de que esta URL coincida con la de tu servidor Express
   // Tu backend está corriendo en http://localhost:3000
-  baseURL: 'http://localhost:3000/api', 
+  baseURL: 'https://inventario-pos-api.onrender.com/api', 
   headers: {
     'Content-Type': 'application/json',
   },

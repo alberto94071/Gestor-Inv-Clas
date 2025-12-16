@@ -15,7 +15,8 @@ const app = express();
 // --- 1. Configuración de CORS ---
 // Permite que el frontend (localhost:5173) acceda a esta API (localhost:3000)
 app.use(cors({
-    origin: 'http://localhost:5173', 
+    origin: 'https://gestor-inv-clas.pages.dev',
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
