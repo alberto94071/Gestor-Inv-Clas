@@ -7,7 +7,7 @@ import {
 import API from '../api/axiosInstance'; 
 
 const Users = () => {
-    const initialState = { nombre: '', email: '', password: '', rol: 'Cajero' };
+    const initialState = { nombre: '', email: '', password: '', rol: 'cajero' };
     const [formData, setFormData] = useState(initialState);
     const [loading, setLoading] = useState(false);
     const [responseMsg, setResponseMsg] = useState({ type: '', text: '' });
