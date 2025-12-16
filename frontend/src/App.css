@@ -1,42 +1,93 @@
+/* =========================================
+   1. CONFIGURACIÓN GLOBAL (RESET)
+   ========================================= */
+:root {
+  font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Esquema de colores base (coincide con el azul de MUI por defecto) */
+  --primary-color: #1976d2;
+  --bg-color: #f4f6f8; /* Un gris muy suave, profesional para sistemas */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  min-height: 100vh;
+  overflow-x: hidden; /* Evita el scroll horizontal en móviles */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hacemos que la aplicación ocupe al menos el 100% de la altura */
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+/* =========================================
+   2. ESTILOS DE UTILIDAD
+   ========================================= */
+
+/* Clase para centrar contenido (útil para el Login) */
+.center-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+/* Sombra suave para las tarjetas (opcional si no usas Paper elevation) */
+.card-shadow {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* =========================================
+   3. OPTIMIZACIÓN MÓVIL (RESPONSIVE)
+   ========================================= */
+
+@media (max-width: 600px) {
+  /* Aprovechar mejor el espacio en pantallas pequeñas */
+  .MuiContainer-root {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
   }
-  to {
-    transform: rotate(360deg);
+
+  /* Títulos más pequeños en celular para que no ocupen media pantalla */
+  h1, h2, h3, h4 {
+    font-size: 1.5rem !important;
+  }
+
+  /* Botones más altos: más fáciles de tocar con el dedo (Touch Targets) */
+  button.MuiButton-root {
+    min-height: 48px; 
+    font-weight: bold;
+  }
+
+  /* Ajuste para inputs de texto en móvil */
+  .MuiTextField-root {
+    margin-bottom: 12px !important;
+  }
+
+  /* Asegurar que las tablas tengan scroll si son muy anchas */
+  .MuiTableContainer-root {
+    overflow-x: auto;
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+/* =========================================
+   4. ANIMACIONES SUAVES (Opcional)
+   ========================================= */
+/* Hace que los botones se sientan mejor al hacer click */
+button:active {
+  transform: scale(0.98);
+  transition: transform 0.1s;
 }
