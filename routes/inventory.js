@@ -1,72 +1,110 @@
+// gestor-inventario-ropa/routes/inventory.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db'); // Asegúrate que esta ruta apunte a tu conexión de BD
-const authenticateToken = require('../middleware/authMiddleware'); // O '../middleware/auth' según tu estructura
+const db = require('../db/db'); // Asegúrate que esta ruta sea correcta según tu estructura
+const authenticateToken = require('../middleware/auth'); 
+const checkAdminRole = require('../middleware/adminMiddleware'); 
+const logActivity = require('../middleware/logMiddleware');
+const { generateUniqueBarcode } = require('../utils/barcodeGenerator');
 
-// --- 1. OBTENER INVENTARIO COMPLETO ---
-router.get('/inventory', authenticateToken, async (req, res) => {
-    try {
-        // Ordenamos por ID descendente para ver los nuevos primero
-        const result = await db.query('SELECT * FROM productos ORDER BY id DESC');
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Error al obtener inventario" });
-    }
-});
+// ---------------------------------------------------------------------
+// 1. REGISTRAR PRODUCTO (POST /products)
+// CORREGIDO: Ahora acepta imagen_url y usa transacciones
+// ---------------------------------------------------------------------
+router.post('/products', authenticateToken, logActivity('Creación de Producto', 'productos'), async (req, res) => {
+    // 🟢 AQUÍ ESTABA EL ERROR: Agregamos 'imagen_url' al destructuring
+    const { 
+        nombre, marca, descripcion, precio_venta, 
+        talla, color, codigo_barras, stock_inicial, imagen_url 
+    } = req.body;
 
-// --- 2. CREAR PRODUCTO (Corregido: Imagen opcional) ---
-router.post('/products', authenticateToken, async (req, res) => {
-    // 🟢 CORRECCIÓN AQUÍ: Agregamos 'imagen_url' al destructuring para evitar el ReferenceError
-    const { nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url } = req.body;
-
-    // Validación básica
     if (!nombre || !precio_venta) {
-        return res.status(400).json({ error: "Nombre y Precio son obligatorios" });
+        return res.status(400).json({ error: 'Nombre y Precio de Venta son obligatorios.' });
     }
+
+    const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
+    const finalCode = codigoLimpio || generateUniqueBarcode();
 
     try {
         await db.query('BEGIN');
 
-        // Generar código automático si viene vacío
-        let finalCode = codigo_barras;
-        if (!finalCode || finalCode.trim() === '') {
-            finalCode = `GEN-${Date.now().toString().slice(-6)}`;
-        }
-
-        // Insertar en la base de datos
-        // Usamos (imagen_url || null) para permitir que se guarde sin foto
-        const result = await db.query(
+        // A. Insertar Producto (Incluyendo imagen_url)
+        // Usamos (imagen_url || null) para evitar errores si no envían foto
+        const productResult = await db.query(
             `INSERT INTO productos 
-            (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url, cantidad) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0) RETURNING id`,
+            (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
             [nombre, marca, descripcion, precio_venta, talla, color, finalCode, imagen_url || null]
+        );
+        const newProductId = productResult.rows[0].id;
+
+        // B. Insertar en tabla INVENTARIO
+        let cantidad = 0;
+        if (stock_inicial) {
+            cantidad = parseInt(stock_inicial);
+            if (isNaN(cantidad)) cantidad = 0; 
+        }
+        
+        await db.query(
+            'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2)',
+            [newProductId, cantidad]
         );
 
         await db.query('COMMIT');
-        res.status(201).json({ 
-            message: "Producto registrado exitosamente", 
-            id: result.rows[0].id,
-            codigo: finalCode
-        });
+        res.status(201).json({ message: 'Producto registrado con éxito', producto: productResult.rows[0] });
 
-    } catch (err) {
+    } catch (error) {
         await db.query('ROLLBACK');
-        console.error("Error al crear producto:", err);
-        // Manejo de error de código duplicado
-        if (err.code === '23505') { 
-            return res.status(400).json({ error: "El código de barras ya existe." });
+        console.error('Error al registrar producto:', error);
+        
+        if (error.code === '23505') {
+            return res.status(400).json({ error: 'El código de barras ya existe.' });
         }
-        res.status(500).json({ error: "Error interno del servidor" });
+        res.status(500).json({ error: 'Error al registrar el producto.' });
     }
 });
 
-// --- 3. EDITAR PRODUCTO (PUT) ---
-router.put('/products/:id', authenticateToken, async (req, res) => {
+// ---------------------------------------------------------------------
+// 2. CONSULTAR INVENTARIO (GET /inventory)
+// CORREGIDO: Ahora devuelve también la imagen_url
+// ---------------------------------------------------------------------
+router.get('/inventory', authenticateToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                p.id,
+                p.nombre, 
+                p.marca, 
+                p.precio_venta, 
+                p.talla, 
+                p.color, 
+                p.codigo_barras, 
+                p.imagen_url, -- 🟢 Agregado para que se vea la foto en la tabla
+                COALESCE(i.cantidad, 0) as cantidad
+            FROM productos p
+            LEFT JOIN inventario i ON p.id = i.producto_id
+            ORDER BY 
+                CASE WHEN COALESCE(i.cantidad, 0) > 0 THEN 0 ELSE 1 END,
+                p.id DESC;
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error al obtener inventario:', error);
+        res.status(500).json({ error: 'Error al obtener el inventario' });
+    }
+});
+
+// ---------------------------------------------------------------------
+// 3. EDITAR PRODUCTO (PUT /products/:id) - NUEVA FUNCIONALIDAD
+// Permite modificar datos y foto, manteniendo el ID
+// ---------------------------------------------------------------------
+router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edición de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
     const { nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url } = req.body;
 
     try {
+        // Actualizamos la tabla productos
         const result = await db.query(
             `UPDATE productos 
              SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8
@@ -85,81 +123,165 @@ router.put('/products/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// --- 4. ELIMINAR PRODUCTO ---
-router.delete('/products/:id', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    try {
-        const result = await db.query('DELETE FROM productos WHERE id = $1', [id]);
-        
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: "Producto no encontrado" });
-        }
-        res.json({ message: "Producto eliminado correctamente" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "No se pudo eliminar el producto" });
-    }
-});
-
-// --- 5. SUMAR STOCK (Ingreso de Mercadería) ---
+// ---------------------------------------------------------------------
+// 4. SUMAR STOCK (POST /add-stock)
+// Adaptado para usar tu tabla 'inventario' separada
+// ---------------------------------------------------------------------
 router.post('/add-stock', authenticateToken, async (req, res) => {
     const { producto_id, cantidad } = req.body;
 
-    if (!producto_id || !cantidad || cantidad <= 0) {
-        return res.status(400).json({ error: "Datos inválidos para sumar stock" });
+    if (!producto_id || !cantidad) {
+        return res.status(400).json({ error: "Datos insuficientes" });
     }
 
     try {
-        const result = await db.query(
-            'UPDATE productos SET cantidad = cantidad + $1 WHERE id = $2 RETURNING *',
-            [cantidad, producto_id]
-        );
+        // En tu sistema, el stock está en la tabla 'inventario', no en 'productos'
+        // Primero verificamos si existe registro en inventario
+        const check = await db.query('SELECT * FROM inventario WHERE producto_id = $1', [producto_id]);
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: "Producto no encontrado" });
+        let result;
+        if (check.rows.length > 0) {
+            // Si existe, actualizamos
+            result = await db.query(
+                'UPDATE inventario SET cantidad = cantidad + $1 WHERE producto_id = $2 RETURNING cantidad',
+                [cantidad, producto_id]
+            );
+        } else {
+            // Si es un producto "huérfano" (sin registro en inventario), lo creamos
+            result = await db.query(
+                'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2) RETURNING cantidad',
+                [producto_id, cantidad]
+            );
         }
 
-        res.json({ message: "Stock actualizado", nuevo_stock: result.rows[0].cantidad });
+        res.json({ message: "Stock actualizado correctamente", nuevo_stock: result.rows[0].cantidad });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Error al actualizar stock" });
+        console.error("Error al actualizar stock:", err);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// --- 6. REGISTRAR VENTA (Salida de Stock - POS) ---
+// ---------------------------------------------------------------------
+// 5. SCAN-IN (Mantenemos por compatibilidad si lo usas en otro lado)
+// ---------------------------------------------------------------------
+router.post('/scan-in', authenticateToken, async (req, res) => {
+    const { codigo_barras, cantidad = 1 } = req.body;
+    const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
+
+    try {
+        const prodQuery = await db.query('SELECT id FROM productos WHERE codigo_barras = $1', [codigoLimpio]);
+        
+        if (prodQuery.rows.length === 0) {
+            return res.status(404).json({ error: 'Producto no encontrado.' });
+        }
+        const producto_id = prodQuery.rows[0].id;
+
+        const update = await db.query(
+            'UPDATE inventario SET cantidad = cantidad + $1 WHERE producto_id = $2 RETURNING cantidad',
+            [cantidad, producto_id]
+        );
+
+        if (update.rows.length > 0) {
+            return res.json({ message: 'Stock agregado.', nueva_cantidad: update.rows[0].cantidad });
+        } else {
+            await db.query('INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2)', [producto_id, cantidad]);
+            return res.json({ message: 'Stock inicializado y agregado.', nueva_cantidad: cantidad });
+        }
+    } catch (error) {
+        console.error('Error en scan-in:', error);
+        res.status(500).json({ error: 'Error interno.' });
+    }
+});
+
+// ---------------------------------------------------------------------
+// 6. SALIDA DE STOCK / VENTA (POST /scan-out)
+// Resta de la tabla inventario
+// ---------------------------------------------------------------------
 router.post('/scan-out', authenticateToken, async (req, res) => {
-    const { codigo_barras, cantidad } = req.body;
+    const { codigo_barras, cantidad = 1 } = req.body;
+    // Manejo seguro del ID de usuario
+    const userId = req.user ? req.user.userId : null; 
     
+    const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
+
     try {
         await db.query('BEGIN');
 
-        // 1. Verificar existencia y stock
-        const check = await db.query('SELECT id, cantidad, nombre FROM productos WHERE codigo_barras = $1', [codigo_barras]);
-        
+        const checkQuery = `
+            SELECT i.producto_id, i.cantidad, p.precio_venta 
+            FROM inventario i
+            JOIN productos p ON i.producto_id = p.id
+            WHERE p.codigo_barras = $1
+        `;
+        const check = await db.query(checkQuery, [codigoLimpio]);
+
         if (check.rows.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: "Producto no encontrado" });
+            return res.status(404).json({ error: 'Producto no encontrado o sin stock registrado.' });
         }
 
-        const producto = check.rows[0];
+        const { producto_id, cantidad: stockActual, precio_venta } = check.rows[0];
 
-        if (producto.cantidad < cantidad) {
+        if (stockActual < cantidad) {
             await db.query('ROLLBACK');
-            return res.status(400).json({ error: `Stock insuficiente de ${producto.nombre}. Disponible: ${producto.cantidad}` });
+            return res.status(400).json({ error: `Stock insuficiente. Disponible: ${stockActual}` });
         }
 
-        // 2. Restar inventario
-        await db.query('UPDATE productos SET cantidad = cantidad - $1 WHERE id = $2', [cantidad, producto.id]);
+        // Restar inventario
+        const update = await db.query(
+            'UPDATE inventario SET cantidad = cantidad - $1 WHERE producto_id = $2 RETURNING cantidad',
+            [cantidad, producto_id]
+        );
 
-        // 3. (Opcional) Guardar en historial de ventas aquí si tienes la tabla 'ventas'
+        // Guardar historial si hay usuario (POS)
+        if (userId) {
+            const totalVenta = precio_venta * cantidad;
+            await db.query(
+                'INSERT INTO historial_ventas (producto_id, cantidad, precio_unitario, total_venta, user_id) VALUES ($1, $2, $3, $4, $5)',
+                [producto_id, cantidad, precio_venta, totalVenta, userId]
+            );
+        }
 
         await db.query('COMMIT');
-        res.json({ message: "Venta registrada" });
+        res.json({ message: 'Venta registrada.', nueva_cantidad: update.rows[0].cantidad });
 
-    } catch (err) {
+    } catch (error) {
         await db.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ error: "Error al procesar la venta" });
+        console.error('Error en scan-out:', error);
+        res.status(500).json({ error: 'Error interno.' });
+    }
+});
+
+// ---------------------------------------------------------------------
+// 7. ELIMINAR PRODUCTO (DELETE /products/:id)
+// Protegido por checkAdminRole
+// ---------------------------------------------------------------------
+router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('Eliminación de Producto', 'productos'), async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        await db.query('BEGIN');
+        // Primero borramos del inventario
+        await db.query('DELETE FROM inventario WHERE producto_id = $1', [id]);
+        // Luego borramos el producto
+        const result = await db.query('DELETE FROM productos WHERE id = $1 RETURNING *', [id]);
+
+        if (result.rowCount === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Producto no encontrado.' });
+        }
+
+        await db.query('COMMIT');
+        res.json({ message: 'Producto eliminado correctamente.' });
+
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Error al eliminar producto:', error);
+        
+        if (error.code === '23503') {
+            return res.status(400).json({ error: 'No se puede eliminar: El producto tiene historial de ventas.' });
+        }
+        res.status(500).json({ error: 'Error interno al eliminar.' });
     }
 });
 
