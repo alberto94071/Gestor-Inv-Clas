@@ -32,8 +32,8 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
 
         // A. Insertar Producto
         const productResult = await db.query(
-            'INSERT INTO productos (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-            [nombre, marca, descripcion, precio_venta, talla, color, finalCode]
+            'INSERT INTO productos (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+            [nombre, marca, descripcion, precio_venta, talla, color, finalCode, imagen_url]
         );
         const newProductId = productResult.rows[0].id;
 
