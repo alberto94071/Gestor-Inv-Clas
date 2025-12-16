@@ -224,4 +224,30 @@ router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('E
     }
 });
 
+// backend/routes/inventory.js (ejemplo)
+// Ruta para aumentar stock de un producto existente
+router.post('/add-stock', async (req, res) => {
+    const { producto_id, cantidad } = req.body;
+
+    if (!producto_id || !cantidad) {
+        return res.status(400).json({ error: "Datos insuficientes" });
+    }
+
+    try {
+        // Actualiza la cantidad sumando la nueva a la existente
+        const result = await db.query(
+            'UPDATE productos SET cantidad = cantidad + $1 WHERE id = $2 RETURNING *',
+            [cantidad, producto_id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Producto no encontrado" });
+        }
+
+        res.json({ message: "Stock actualizado correctamente", producto: result.rows[0] });
+    } catch (err) {
+        console.error("Error al actualizar stock:", err);
+        res.status(500).json({ error: "Error interno del servidor" });
+    }
+});
 module.exports = router;

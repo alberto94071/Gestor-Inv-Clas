@@ -1,43 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Dialog, DialogTitle, DialogContent, DialogActions, 
-    TextField, Button, Grid, Alert, Typography, Box, IconButton 
+    TextField, Button, Grid, Alert, Typography, Box 
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import API from '../api/axiosInstance.js';
 
-const CreateProductModal = ({ open, handleClose, fetchInventory, getToken }) => {
-    // Configuración de Cloudinary (Usa tu Cloud Name)
-    const CLOUD_NAME = "dbwlqg4tp"; 
-    const UPLOAD_PRESET = "potter_presets"; // Por defecto Cloudinary crea uno llamado 'ml_default'
+// 1. Mover constantes AFUERA del componente para evitar advertencias de ESLint
+const CLOUD_NAME = "dbwlqg4tp"; 
+const UPLOAD_PRESET = "potter_presets"; 
 
-    const initialState = {
-        nombre: '',
-        marca: '',
-        descripcion: '',
-        precio_venta: '',
-        talla: '',
-        color: '',
-        codigo_barras: '',
-        imagen_url: '' // Nuevo campo
-    };
+const initialState = {
+    nombre: '',
+    marca: '',
+    descripcion: '',
+    precio_venta: '',
+    talla: '',
+    color: '',
+    codigo_barras: '',
+    imagen_url: '' 
+};
+
+// 2. Agregamos 'initialData' a las props para recibir el código escaneado
+const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initialData }) => {
 
     const [formData, setFormData] = useState(initialState);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [preview, setPreview] = useState(null);
 
+    // 3. UseEffect Corregido: Detecta cuando se abre el modal y si hay datos previos (código escaneado)
+    useEffect(() => {
+        if (open) {
+            if (initialData) {
+                // Si viene un código del Dashboard, lo pre-cargamos
+                setFormData(prev => ({ ...initialState, ...initialData }));
+            } else {
+                // Si es apertura manual, limpiamos
+                setFormData(initialState);
+                setPreview(null);
+            }
+        }
+    }, [open, initialData]); 
+    // Al estar 'initialState' fuera del componente, ya no es necesario ponerlo aquí
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    // --- FUNCIÓN PARA SUBIR A CLOUDINARY ---
     const handleImageChange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Mostrar vista previa local
         setPreview(URL.createObjectURL(file));
         setLoading(true);
 
@@ -51,11 +66,10 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken }) => 
                 { method: "POST", body: data }
             );
             const fileData = await res.json();
-            
-            // Guardamos la URL que nos da Cloudinary
             setFormData(prev => ({ ...prev, imagen_url: fileData.secure_url }));
         } catch (err) {
-            setError("Error al subir la imagen a la nube.");
+            console.error(err);
+            setError("Error al subir imagen. Verifique conexión.");
         } finally {
             setLoading(false);
         }
@@ -66,25 +80,22 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken }) => 
         setError(null);
 
         if (!formData.nombre || !formData.marca || !formData.precio_venta) {
-            setError("Por favor, completa los campos obligatorios.");
+            setError("Por favor, completa Nombre, Marca y Precio.");
             setLoading(false);
             return;
         }
 
         try {
             const token = getToken();
-            if (!token) throw new Error("No autenticado.");
-
             await API.post('/inventory/products', formData, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            fetchInventory();
+            fetchInventory(); 
             handleClose();
-            setFormData(initialState);
-            setPreview(null);
+            // El reseteo del form ya lo maneja el useEffect al cambiar 'open'
         } catch (err) {
-            const msg = err.response?.data?.error || "Error al crear el producto.";
+            const msg = err.response?.data?.error || "Error al guardar.";
             setError(msg);
         } finally {
             setLoading(false);
@@ -93,59 +104,68 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken }) => 
 
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-            <DialogTitle>📦 Registrar Nuevo Producto</DialogTitle>
-            <DialogContent>
-                {error && <Alert severity="error" sx={{ mb: 2, mt: 1 }}>{error}</Alert>}
+            <DialogTitle sx={{ bgcolor: '#2c3e50', color: 'white' }}>📦 Registrar Nuevo Producto</DialogTitle>
+            <DialogContent sx={{ mt: 2 }}>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 
                 <Grid container spacing={2} sx={{ mt: 1 }}>
-                    {/* SECCIÓN DE IMAGEN */}
+                    {/* FOTO */}
                     <Grid item xs={12} display="flex" flexDirection="column" alignItems="center" sx={{ mb: 2 }}>
                         <Box 
                             sx={{ 
                                 width: 150, height: 150, border: '2px dashed #ccc', 
                                 display: 'flex', justifyContent: 'center', alignItems: 'center',
-                                overflow: 'hidden', borderRadius: 2, mb: 1
+                                overflow: 'hidden', borderRadius: 2, mb: 1, bgcolor: '#f9f9f9'
                             }}
                         >
-                            {preview ? (
-                                <img src={preview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            {preview || formData.imagen_url ? (
+                                <img src={preview || formData.imagen_url} alt="Prenda" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                                 <Typography variant="caption" color="textSecondary">Sin Foto</Typography>
                             )}
                         </Box>
                         <Button variant="outlined" component="label" startIcon={<PhotoCamera />} disabled={loading}>
-                            {loading ? "Subiendo..." : "Subir Foto"}
+                            {loading ? "Cargando..." : "Tomar Foto"}
                             <input type="file" hidden accept="image/*" onChange={handleImageChange} />
                         </Button>
                     </Grid>
 
+                    {/* CAMPOS */}
                     <Grid item xs={12} sm={6}>
-                        <TextField label="Nombre" name="nombre" fullWidth required value={formData.nombre} onChange={handleChange} />
+                        <TextField label="Nombre *" name="nombre" fullWidth value={formData.nombre} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                        <TextField label="Marca" name="marca" fullWidth required value={formData.marca} onChange={handleChange} />
+                        <TextField label="Marca *" name="marca" fullWidth value={formData.marca} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={12}>
                         <TextField label="Descripción" name="descripcion" fullWidth multiline rows={2} value={formData.descripcion} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={6} sm={4}>
-                        <TextField label="Precio (Q)" name="precio_venta" type="number" fullWidth required value={formData.precio_venta} onChange={handleChange} />
+                        <TextField label="Precio (Q) *" name="precio_venta" type="number" fullWidth value={formData.precio_venta} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={6} sm={4}>
-                        <TextField label="Talla" name="talla" fullWidth required value={formData.talla} onChange={handleChange} />
+                        <TextField label="Talla" name="talla" fullWidth value={formData.talla} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={12} sm={4}>
-                        <TextField label="Color" name="color" fullWidth required value={formData.color} onChange={handleChange} />
+                        <TextField label="Color" name="color" fullWidth value={formData.color} onChange={handleChange} />
                     </Grid>
                     <Grid item xs={12}>
-                        <TextField label="Código de Barras" name="codigo_barras" fullWidth value={formData.codigo_barras} onChange={handleChange} />
+                        <TextField 
+                            label="Código de Barras" 
+                            name="codigo_barras" 
+                            fullWidth 
+                            value={formData.codigo_barras} 
+                            onChange={handleChange} 
+                            helperText="Escanea o escribe. Si lo dejas vacío se generará uno automático."
+                            InputLabelProps={{ shrink: true }} 
+                        />
                     </Grid>
                 </Grid>
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={{ p: 2 }}>
                 <Button onClick={handleClose} color="secondary">Cancelar</Button>
                 <Button onClick={handleSubmit} variant="contained" color="primary" disabled={loading}>
-                    {loading ? 'Procesando...' : 'Guardar Producto'}
+                    {loading ? 'Guardando...' : 'Guardar Producto'}
                 </Button>
             </DialogActions>
         </Dialog>
