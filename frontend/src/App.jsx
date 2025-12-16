@@ -1,84 +1,117 @@
 // src/App.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Box, CssBaseline } from '@mui/material';
+import { Box, CssBaseline, CircularProgress } from '@mui/material';
 
 // Importación de Componentes
-import Login from './components/Login.jsx'; 
-import InventoryDashboard from './components/InventoryDashboard.jsx'; // Tu inventario actual
-import Sidebar from './components/Sidebar.jsx'; // El menú nuevo
-import StatsDashboard from './components/StatsDashboard.jsx'; // Las gráficas nuevas
-import PointOfSale from './components/PointOfSale.jsx'; // <--- AGREGAR ESTO
-// Componentes "Placeholder" para las rutas que aun no programamos
-import Reports from './components/Reports.jsx'; // <--- AGREGAR ESTO
-import Users from './components/Users.jsx';
-import AuditLog from './components/AuditLog.jsx'; // 🛑 NUEVO
+import Sidebar from './components/Sidebar';
+import Login from './components/Login';
+import StatsDashboard from './components/StatsDashboard';
+import InventoryDashboard from './components/InventoryDashboard';
+import PointOfSale from './components/PointOfSale';
+import Reports from './components/Reports';
+import Users from './components/Users';
+import AuditLog from './components/AuditLog';
+
 function App() {
-  const initialLoginState = !!localStorage.getItem('authToken');
-  const [isLoggedIn, setIsLoggedIn] = useState(initialLoginState);
-  const [user, setUser] = useState(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-  const handleLoginSuccess = (userData) => {
-    setUser(userData);
-    setIsLoggedIn(true);
-  };
-  
-  const handleLogout = () => {
-    localStorage.removeItem('authToken'); 
-    setIsLoggedIn(false);
-    setUser(null);
-  };
+    // 1. Verificar si hay sesión guardada al iniciar la app
+    useEffect(() => {
+        const checkAuth = () => {
+            const token = localStorage.getItem('authToken');
+            const storedUser = localStorage.getItem('user');
 
-  // Si no está logueado, mostrar solo Login
-  if (!isLoggedIn) {
-      return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
+            if (token && storedUser) {
+                setIsAuthenticated(true);
+                setUser(JSON.parse(storedUser));
+            } else {
+                setIsAuthenticated(false);
+                setUser(null);
+            }
+            setLoading(false);
+        };
+        checkAuth();
+    }, []);
 
-  // Si está logueado, mostrar la estructura con Menú Lateral (Layout)
-  // En src/App.jsx
+    // 2. Función para Iniciar Sesión (Se pasa a Login.jsx)
+    const handleLogin = (userData) => {
+        setIsAuthenticated(true);
+        setUser(userData);
+    };
 
-// ... (imports y lógica igual) ...
+    // 3. Función para Cerrar Sesión (Se pasa a Sidebar.jsx)
+    const handleLogout = () => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        setIsAuthenticated(false);
+        setUser(null);
+    };
 
-  // Si está logueado, mostrar la estructura con Menú Lateral
-  return (
-    <Router>
-        {/* Contenedor PADRE: Ocupa 100% de ancho y alto de la ventana */}
-        <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    // Mostrar spinner mientras verificamos el token
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    return (
+        <Router>
             <CssBaseline />
-            
-            {/* Menú Lateral */}
-            <Sidebar handleLogout={handleLogout} user={user}/>
+            <Box sx={{ display: 'flex' }}>
+                
+                {/* Si está autenticado, mostramos el Sidebar */}
+                {isAuthenticated && (
+                    <Sidebar handleLogout={handleLogout} user={user} />
+                )}
 
-            {/* Contenido Principal (Derecha) */}
-            <Box 
-                component="main" 
-                sx={{ 
-                    flexGrow: 1, 
-                    p: 2, // Un poco de padding interno
-                    bgcolor: '#f5f5f5', 
-                    height: '100%', // Altura total
-                    overflow: 'auto', // Si el contenido es muy largo, que aparezca scroll SOLO aquí
-                    display: 'flex',
-                    flexDirection: 'column'
-                }}
-            >
-                {/* Esto hace que las rutas ocupen todo el espacio disponible */}
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                {/* Contenedor Principal */}
+                <Box component="main" sx={{ flexGrow: 1, p: 3, width: '100%', overflowX: 'hidden' }}>
                     <Routes>
-                        <Route path="/" element={<StatsDashboard />} />
-                        <Route path="/inventory" element={<InventoryDashboard user={user} />} />
-                        <Route path="/pos" element={<PointOfSale />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/users" element={<Users />} />
-                        <Route path="*" element={<Navigate to="/" />} />
-                        <Route path="/audit" element={<AuditLog />} /> 
+                        {/* RUTA DE LOGIN */}
+                        <Route 
+                            path="/login" 
+                            element={
+                                !isAuthenticated ? (
+                                    <Login handleLogin={handleLogin} /> // 🛑 Aquí pasamos la función vital
+                                ) : (
+                                    <Navigate to="/" />
+                                )
+                            } 
+                        />
+
+                        {/* RUTAS PROTEGIDAS */}
+                        {isAuthenticated ? (
+                            <>
+                                <Route path="/" element={<StatsDashboard />} />
+                                <Route path="/inventory" element={<InventoryDashboard />} />
+                                <Route path="/pos" element={<PointOfSale />} />
+                                
+                                {/* Rutas solo para Admin (Protección visual básica) */}
+                                {user?.rol === 'admin' && (
+                                    <>
+                                        <Route path="/reports" element={<Reports />} />
+                                        <Route path="/users" element={<Users />} />
+                                        <Route path="/audit" element={<AuditLog />} />
+                                    </>
+                                )}
+                                
+                                {/* Si intenta ir a una ruta no definida, va al inicio */}
+                                <Route path="*" element={<Navigate to="/" />} />
+                            </>
+                        ) : (
+                            // Si no está autenticado, cualquier ruta lo manda al login
+                            <Route path="*" element={<Navigate to="/login" />} />
+                        )}
                     </Routes>
                 </Box>
             </Box>
-        </Box>
-    </Router>
-  );
-
+        </Router>
+    );
 }
 
 export default App;

@@ -2,16 +2,23 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // Usamos bcryptjs para la encriptación
+const bcrypt = require('bcryptjs'); // Asegúrate de tener instalado bcryptjs
 const db = require('../db/db');
 
-// Ruta para el inicio de sesión
+// ---------------------------------------------------------------------
+// INICIO DE SESIÓN (POST /login)
+// ---------------------------------------------------------------------
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
+    // Validación básica de entrada
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Por favor ingrese email y contraseña.' });
+    }
+
     try {
-        // 1. Buscar el usuario por email
-        // 🛑 CRÍTICO: Usamos 'usuarios' aquí para coincidir con el nombre de tu tabla
+        // 1. Buscar el usuario en la base de datos
+        // Usamos la tabla 'usuarios' (en español)
         const result = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
         
         if (result.rows.length === 0) {
@@ -28,24 +35,26 @@ router.post('/login', async (req, res) => {
         }
 
         // 3. Generar el Token de Acceso (JWT)
-        // 🛑 CRÍTICO: Incluimos el 'rol' y el 'nombre' en el token (payload)
+        // 🛑 CRÍTICO: Usamos la clave 'userId' para que coincida con lo que espera inventory.js
         const token = jwt.sign(
             { 
-                userId: user.id, 
-                rol: user.rol, 
+                userId: user.id,   // <--- ESTO ARREGLA LA VENTA
+                rol: user.rol,     // <--- ESTO SIRVE PARA LOS PERMISOS
                 nombre: user.nombre 
             }, 
             process.env.JWT_SECRET, 
-            { expiresIn: '1h' } // El token expira en 1 hora
+            { expiresIn: '12h' } // Token válido por 12 horas
         );
         
-        // 4. Enviar el token y los datos del usuario de vuelta al Frontend
+        // 4. Enviar respuesta al Frontend
+        // Enviamos el usuario explícitamente para guardarlo en localStorage (para el botón eliminar)
         res.json({ 
             token, 
             user: { 
                 id: user.id,
                 nombre: user.nombre, 
-                rol: user.rol 
+                rol: user.rol,      // <--- ESTO HACE APARECER EL BOTÓN ELIMINAR
+                email: user.email
             } 
         });
 
