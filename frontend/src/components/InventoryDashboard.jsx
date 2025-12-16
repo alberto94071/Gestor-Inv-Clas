@@ -9,7 +9,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete'; 
-import CreateProductModal from './CreateProductModal'; // El modal con cámara y Cloudinary
+import EditIcon from '@mui/icons-material/Edit'; // Icono para editar
+import CreateProductModal from './CreateProductModal'; // El modal inteligente
 
 const InventoryDashboard = () => {
     // --- ESTADOS ---
@@ -19,28 +20,26 @@ const InventoryDashboard = () => {
     const [searchTerm, setSearchTerm] = useState(''); 
     const [userRole, setUserRole] = useState('');
     
-    // Estados para Modales
+    // Estado para el Modal de Crear/Editar
     const [openCreateModal, setOpenCreateModal] = useState(false);
-    const [scannedCode, setScannedCode] = useState('');
+    const [modalData, setModalData] = useState(null); // Aquí guardamos los datos a pasar al modal (para editar o crear con código)
     
-    // Modal Confirmación de "Código Nuevo"
+    // Estado para lógica de escáner
+    const [scannedCode, setScannedCode] = useState('');
     const [confirmNewOpen, setConfirmNewOpen] = useState(false);
     
-    // Modal Eliminar
+    // Estados para Eliminar y Stock
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [productToDelete, setProductToDelete] = useState(null);
-
-    // Modal para Aumentar Stock (Mercadería Nueva)
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [addQuantity, setAddQuantity] = useState('');
 
-    // --- CARGAR DATOS ---
+    // --- CARGAR INVENTARIO ---
     const fetchInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
             const userStr = localStorage.getItem('user');
-            
             if (userStr) {
                 const userObj = JSON.parse(userStr);
                 setUserRole(userObj.rol || '');
@@ -52,7 +51,7 @@ const InventoryDashboard = () => {
             setInventory(response.data);
             setError(null);
         } catch (err) {
-            console.error("Error:", err);
+            console.error(err);
             setError("Error de conexión al cargar inventario.");
         } finally {
             setLoading(false);
@@ -63,46 +62,65 @@ const InventoryDashboard = () => {
         fetchInventory();
     }, []);
 
-    // --- LÓGICA INTELIGENTE DE ESCANEO ---
+    // --- LÓGICA DE ESCANEO INTELIGENTE ---
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter' && searchTerm.trim() !== '') {
             const code = searchTerm.trim();
             const found = inventory.find(p => p.codigo_barras === code);
             
             if (found) {
-                // CASO 1: El producto YA existe -> Abrir modal de Stock
+                // CASO 1: Producto existe -> Abrir modal de Stock
                 setSelectedProduct(found);
                 setStockModalOpen(true);
-                setAddQuantity(''); // Limpiar campo
+                setAddQuantity('');
             } else {
-                // CASO 2: El producto NO existe -> Preguntar si crear
+                // CASO 2: Producto NO existe -> Preguntar si crear
                 setScannedCode(code);
                 setConfirmNewOpen(true);
             }
-            setSearchTerm(''); // Limpiar barra de búsqueda
+            setSearchTerm(''); // Limpiar buscador
         }
     };
 
-    // --- GUARDAR AUMENTO DE STOCK ---
+    // --- MANEJADORES DE ACCIONES ---
+
+    // 1. Abrir Modal para CREAR DESDE CERO
+    const handleOpenCreate = () => {
+        setModalData(null); // Limpiamos datos
+        setOpenCreateModal(true);
+    };
+
+    // 2. Abrir Modal para EDITAR
+    const handleOpenEdit = (product) => {
+        setModalData(product); // Pasamos el producto completo (incluyendo ID e imagen_url)
+        setOpenCreateModal(true);
+    };
+
+    // 3. Abrir Modal para CREAR CON CÓDIGO ESCANEADO
+    const handleCreateFromScan = () => {
+        setModalData({ codigo_barras: scannedCode }); // Pre-llenamos el código
+        setConfirmNewOpen(false);
+        setOpenCreateModal(true);
+    };
+
+    // 4. Sumar Stock
     const handleUpdateStock = async () => {
         if (!addQuantity || parseInt(addQuantity) <= 0) return;
-
         try {
             const token = localStorage.getItem('authToken');
-            // Llamamos a la ruta del backend para sumar cantidad
             await API.post(`/inventory/add-stock`, {
                 producto_id: selectedProduct.id,
                 cantidad: parseInt(addQuantity)
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             setStockModalOpen(false);
-            fetchInventory(); // Recargar tabla para ver el cambio
+            fetchInventory(); 
         } catch (err) {
-            alert("Error al actualizar el stock.");
+            alert("Error al actualizar stock.");
         }
     };
 
-    // --- ELIMINAR PRODUCTO ---
+    // 5. Eliminar
     const handleDeleteClick = (product) => {
         setProductToDelete(product);
         setDeleteConfirmOpen(true);
@@ -119,12 +137,12 @@ const InventoryDashboard = () => {
             setProductToDelete(null);
             fetchInventory(); 
         } catch (err) {
-            alert("No se pudo eliminar el producto.");
+            alert("Error al eliminar.");
             setDeleteConfirmOpen(false);
         }
     };
 
-    // Filtros de búsqueda visual
+    // Filtro visual
     const filteredInventory = inventory.filter((item) => {
         const term = searchTerm.toLowerCase();
         return (
@@ -146,14 +164,14 @@ const InventoryDashboard = () => {
                 <Button 
                     variant="contained" 
                     startIcon={<AddIcon />} 
-                    onClick={() => { setScannedCode(''); setOpenCreateModal(true); }}
+                    onClick={handleOpenCreate}
                     sx={{ borderRadius: 2 }}
                 >
                     Nuevo Producto
                 </Button>
             </Box>
 
-            {/* BARRA DE BÚSQUEDA / ESCÁNER */}
+            {/* BARRA DE BÚSQUEDA */}
             <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', border: '1px solid #ddd' }}>
                 <SearchIcon sx={{ color: 'primary.main', mr: 1 }} />
                 <TextField
@@ -169,7 +187,7 @@ const InventoryDashboard = () => {
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-            {/* TABLA DE PRODUCTOS */}
+            {/* TABLA */}
             <TableContainer component={Paper} sx={{ borderRadius: 3, maxHeight: '65vh' }}>
                 <Table stickyHeader>
                     <TableHead>
@@ -190,7 +208,7 @@ const InventoryDashboard = () => {
                                     <Avatar 
                                         src={product.imagen_url} 
                                         variant="rounded" 
-                                        sx={{ width: 50, height: 50, bgcolor: '#eee' }}
+                                        sx={{ width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd' }}
                                     >
                                         {product.nombre.charAt(0)}
                                     </Avatar>
@@ -207,13 +225,17 @@ const InventoryDashboard = () => {
                                     <Chip 
                                         label={product.cantidad} 
                                         color={product.cantidad < 5 ? "error" : "success"} 
-                                        // Al hacer clic en el stock, abrimos el modal para sumar manualmente también
                                         onClick={() => { setSelectedProduct(product); setStockModalOpen(true); }}
                                         sx={{ cursor: 'pointer', minWidth: '40px' }}
                                     />
                                 </TableCell>
                                 {userRole === 'admin' && (
                                     <TableCell align="center">
+                                        {/* Botón EDITAR */}
+                                        <IconButton color="primary" onClick={() => handleOpenEdit(product)} size="small" sx={{ mr: 1 }}>
+                                            <EditIcon />
+                                        </IconButton>
+                                        {/* Botón ELIMINAR */}
                                         <IconButton color="error" onClick={() => handleDeleteClick(product)} size="small">
                                             <DeleteIcon />
                                         </IconButton>
@@ -225,24 +247,24 @@ const InventoryDashboard = () => {
                 </Table>
             </TableContainer>
 
-            {/* MODAL 1: ¿REGISTRAR NUEVO? (Cuando el código no existe) */}
+            {/* --- MODALES --- */}
+
+            {/* 1. Confirmar Código Nuevo */}
             <Dialog open={confirmNewOpen} onClose={() => setConfirmNewOpen(false)}>
                 <DialogTitle>Producto no encontrado</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        El código <strong>{scannedCode}</strong> no está en el sistema. <br/>
-                        ¿Deseas registrar un producto nuevo con este código?
+                        El código <strong>{scannedCode}</strong> no existe. <br/>
+                        ¿Deseas registrarlo ahora?
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setConfirmNewOpen(false)} color="secondary">Cancelar</Button>
-                    <Button onClick={() => { setConfirmNewOpen(false); setOpenCreateModal(true); }} variant="contained" autoFocus>
-                        Registrar Nuevo
-                    </Button>
+                    <Button onClick={handleCreateFromScan} variant="contained" autoFocus>Registrar</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL 2: SUMAR STOCK (Cuando el código YA existe) */}
+            {/* 2. Sumar Stock */}
             <Dialog open={stockModalOpen} onClose={() => setStockModalOpen(false)}>
                 <DialogTitle>Ingreso de Mercadería</DialogTitle>
                 <DialogContent>
@@ -254,30 +276,21 @@ const InventoryDashboard = () => {
                         </Box>
                     </Box>
                     <TextField
-                        autoFocus
-                        label="Cantidad a sumar (+)"
-                        type="number"
-                        fullWidth
-                        value={addQuantity}
-                        onChange={(e) => setAddQuantity(e.target.value)}
-                        placeholder="Ej: 12"
+                        autoFocus label="Cantidad a sumar (+)" type="number" fullWidth
+                        value={addQuantity} onChange={(e) => setAddQuantity(e.target.value)}
                     />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setStockModalOpen(false)} color="secondary">Cancelar</Button>
-                    <Button onClick={handleUpdateStock} variant="contained" color="success">
-                        Sumar al Inventario
-                    </Button>
+                    <Button onClick={handleUpdateStock} variant="contained" color="success">Sumar</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL 3: ELIMINAR */}
+            {/* 3. Confirmar Eliminación */}
             <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
                 <DialogTitle>¿Eliminar Producto?</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>
-                        ¿Estás seguro de eliminar <strong>{productToDelete?.nombre}</strong>?
-                    </DialogContentText>
+                    <DialogContentText>¿Seguro que deseas eliminar <strong>{productToDelete?.nombre}</strong>?</DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
@@ -285,14 +298,13 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL PRINCIPAL: FORMULARIO DE CREACIÓN (Con Cámara) */}
+            {/* 4. MODAL PRINCIPAL (Crear / Editar / Cámara) */}
             <CreateProductModal 
                 open={openCreateModal} 
                 handleClose={() => setOpenCreateModal(false)} 
                 fetchInventory={fetchInventory}
                 getToken={() => localStorage.getItem('authToken')}
-                // Pasamos el código escaneado (si hubo) para que se llene solo
-                initialData={scannedCode ? { codigo_barras: scannedCode } : null} 
+                initialData={modalData} // Aquí pasamos los datos (o null si es nuevo)
             />
         </Container>
     );
