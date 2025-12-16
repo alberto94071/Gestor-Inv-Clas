@@ -4,13 +4,15 @@ import {
     Container, Typography, CircularProgress, Alert, Paper, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
     Button, Box, Chip, TextField, IconButton, Dialog, 
-    DialogTitle, DialogContent, DialogActions, DialogContentText, Avatar
+    DialogTitle, DialogContent, DialogActions, DialogContentText, Avatar,
+    Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete'; 
-import EditIcon from '@mui/icons-material/Edit'; // Icono para editar
-import CreateProductModal from './CreateProductModal'; // El modal inteligente
+import EditIcon from '@mui/icons-material/Edit'; 
+import CloseIcon from '@mui/icons-material/Close'; // Icono para cerrar zoom
+import CreateProductModal from './CreateProductModal'; 
 
 const InventoryDashboard = () => {
     // --- ESTADOS ---
@@ -20,20 +22,23 @@ const InventoryDashboard = () => {
     const [searchTerm, setSearchTerm] = useState(''); 
     const [userRole, setUserRole] = useState('');
     
-    // Estado para el Modal de Crear/Editar
+    // Estados Modales Gestión
     const [openCreateModal, setOpenCreateModal] = useState(false);
-    const [modalData, setModalData] = useState(null); // Aquí guardamos los datos a pasar al modal (para editar o crear con código)
+    const [modalData, setModalData] = useState(null);
     
-    // Estado para lógica de escáner
+    // Estados Lógica Escáner
     const [scannedCode, setScannedCode] = useState('');
     const [confirmNewOpen, setConfirmNewOpen] = useState(false);
     
-    // Estados para Eliminar y Stock
+    // Estados Acciones
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [productToDelete, setProductToDelete] = useState(null);
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [addQuantity, setAddQuantity] = useState('');
+
+    // 🟢 NUEVO ESTADO: Para ver la imagen en grande
+    const [viewImage, setViewImage] = useState(null);
 
     // --- CARGAR INVENTARIO ---
     const fetchInventory = async () => {
@@ -62,48 +67,41 @@ const InventoryDashboard = () => {
         fetchInventory();
     }, []);
 
-    // --- LÓGICA DE ESCANEO INTELIGENTE ---
+    // --- LÓGICA DE ESCANEO ---
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter' && searchTerm.trim() !== '') {
             const code = searchTerm.trim();
             const found = inventory.find(p => p.codigo_barras === code);
             
             if (found) {
-                // CASO 1: Producto existe -> Abrir modal de Stock
                 setSelectedProduct(found);
                 setStockModalOpen(true);
                 setAddQuantity('');
             } else {
-                // CASO 2: Producto NO existe -> Preguntar si crear
                 setScannedCode(code);
                 setConfirmNewOpen(true);
             }
-            setSearchTerm(''); // Limpiar buscador
+            setSearchTerm(''); 
         }
     };
 
-    // --- MANEJADORES DE ACCIONES ---
-
-    // 1. Abrir Modal para CREAR DESDE CERO
+    // --- MANEJADORES ---
     const handleOpenCreate = () => {
-        setModalData(null); // Limpiamos datos
+        setModalData(null); 
         setOpenCreateModal(true);
     };
 
-    // 2. Abrir Modal para EDITAR
     const handleOpenEdit = (product) => {
-        setModalData(product); // Pasamos el producto completo (incluyendo ID e imagen_url)
+        setModalData(product); 
         setOpenCreateModal(true);
     };
 
-    // 3. Abrir Modal para CREAR CON CÓDIGO ESCANEADO
     const handleCreateFromScan = () => {
-        setModalData({ codigo_barras: scannedCode }); // Pre-llenamos el código
+        setModalData({ codigo_barras: scannedCode }); 
         setConfirmNewOpen(false);
         setOpenCreateModal(true);
     };
 
-    // 4. Sumar Stock
     const handleUpdateStock = async () => {
         if (!addQuantity || parseInt(addQuantity) <= 0) return;
         try {
@@ -120,7 +118,6 @@ const InventoryDashboard = () => {
         }
     };
 
-    // 5. Eliminar
     const handleDeleteClick = (product) => {
         setProductToDelete(product);
         setDeleteConfirmOpen(true);
@@ -142,7 +139,6 @@ const InventoryDashboard = () => {
         }
     };
 
-    // Filtro visual
     const filteredInventory = inventory.filter((item) => {
         const term = searchTerm.toLowerCase();
         return (
@@ -156,7 +152,6 @@ const InventoryDashboard = () => {
 
     return (
         <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            {/* ENCABEZADO */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
                     📦 Inventario General
@@ -171,7 +166,6 @@ const InventoryDashboard = () => {
                 </Button>
             </Box>
 
-            {/* BARRA DE BÚSQUEDA */}
             <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', border: '1px solid #ddd' }}>
                 <SearchIcon sx={{ color: 'primary.main', mr: 1 }} />
                 <TextField
@@ -187,7 +181,6 @@ const InventoryDashboard = () => {
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-            {/* TABLA */}
             <TableContainer component={Paper} sx={{ borderRadius: 3, maxHeight: '65vh' }}>
                 <Table stickyHeader>
                     <TableHead>
@@ -205,13 +198,22 @@ const InventoryDashboard = () => {
                         {filteredInventory.map((product) => (
                             <TableRow key={product.id} hover>
                                 <TableCell>
-                                    <Avatar 
-                                        src={product.imagen_url} 
-                                        variant="rounded" 
-                                        sx={{ width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd' }}
-                                    >
-                                        {product.nombre.charAt(0)}
-                                    </Avatar>
+                                    {/* 🟢 AL HACER CLIC, SE ABRE EL ZOOM */}
+                                    <Tooltip title="Ver imagen grande">
+                                        <Avatar 
+                                            src={product.imagen_url} 
+                                            variant="rounded" 
+                                            onClick={() => { if(product.imagen_url) setViewImage(product.imagen_url) }}
+                                            sx={{ 
+                                                width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd',
+                                                cursor: product.imagen_url ? 'pointer' : 'default',
+                                                transition: 'transform 0.2s',
+                                                '&:hover': product.imagen_url ? { transform: 'scale(1.1)' } : {}
+                                            }}
+                                        >
+                                            {product.nombre.charAt(0)}
+                                        </Avatar>
+                                    </Tooltip>
                                 </TableCell>
                                 <TableCell>
                                     <Typography fontWeight="bold" variant="body2">{product.nombre}</Typography>
@@ -231,11 +233,9 @@ const InventoryDashboard = () => {
                                 </TableCell>
                                 {userRole === 'admin' && (
                                     <TableCell align="center">
-                                        {/* Botón EDITAR */}
                                         <IconButton color="primary" onClick={() => handleOpenEdit(product)} size="small" sx={{ mr: 1 }}>
                                             <EditIcon />
                                         </IconButton>
-                                        {/* Botón ELIMINAR */}
                                         <IconButton color="error" onClick={() => handleDeleteClick(product)} size="small">
                                             <DeleteIcon />
                                         </IconButton>
@@ -298,13 +298,49 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 4. MODAL PRINCIPAL (Crear / Editar / Cámara) */}
+            {/* 🟢 4. MODAL VISUALIZADOR DE IMAGEN (ZOOM) */}
+            <Dialog 
+                open={!!viewImage} 
+                onClose={() => setViewImage(null)} 
+                maxWidth="md"
+                // Fondo transparente oscuro
+                PaperProps={{
+                    style: { backgroundColor: 'transparent', boxShadow: 'none' },
+                }}
+            >
+                <Box position="relative" display="flex" justifyContent="center" alignItems="center">
+                    {/* Botón X flotante para cerrar */}
+                    <IconButton 
+                        onClick={() => setViewImage(null)}
+                        sx={{ 
+                            position: 'absolute', top: -40, right: 0, 
+                            color: 'white', bgcolor: 'rgba(0,0,0,0.5)',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }
+                        }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                    
+                    <img 
+                        src={viewImage} 
+                        alt="Zoom" 
+                        style={{ 
+                            maxWidth: '90vw', 
+                            maxHeight: '85vh', 
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)' 
+                        }} 
+                    />
+                </Box>
+            </Dialog>
+
+            {/* 5. MODAL FORMULARIO (Crear/Editar) */}
             <CreateProductModal 
                 open={openCreateModal} 
                 handleClose={() => setOpenCreateModal(false)} 
                 fetchInventory={fetchInventory}
                 getToken={() => localStorage.getItem('authToken')}
-                initialData={modalData} // Aquí pasamos los datos (o null si es nuevo)
+                initialData={modalData} 
             />
         </Container>
     );
