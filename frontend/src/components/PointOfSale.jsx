@@ -8,15 +8,13 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import API from '../api/axiosInstance'; 
-import html2pdf from 'html2pdf.js'; 
+import './Ticket.css';
 
-// Función de formato de moneda (Quetzal)
 const formatCurrency = (amount) => {
     return `Q${Number(amount).toFixed(2)}`;
 };
 
 const PointOfSale = () => {
-    // Estados
     const [inventory, setInventory] = useState([]);
     const [cart, setCart] = useState([]);
     const [barcode, setBarcode] = useState('');
@@ -24,13 +22,13 @@ const PointOfSale = () => {
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
     
+    // Obtenemos el nombre del cajero desde el almacenamiento local
+    const userName = localStorage.getItem('userName') || 'Cajero General';
     const inputRef = useRef(null);
 
-    // Cálculos de Totales
     const total = cart.reduce((acc, item) => acc + (item.precio_venta * item.qty), 0);
     const grandTotal = total; 
 
-    // 1. Cargar inventario al iniciar
     useEffect(() => {
         const loadInventory = async () => {
             try {
@@ -73,67 +71,44 @@ const PointOfSale = () => {
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 20px; border: 1px solid #eee; padding: 10px;">
-                    <p style="margin: 0; font-weight: bold;">Fecha: <span style="font-weight: normal;">${currentDate}</span></p>
-                    <p style="margin: 0; font-weight: bold;">Hora: <span style="font-weight: normal;">${currentTime}</span></p>
-                    <p style="margin: 0; font-weight: bold;">Ticket ID: <span style="font-weight: normal;">${Date.now()}</span></p>
-                </div>
-                
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 12px;">
-                    <thead>
-                        <tr style="background-color: #f2f2f2;">
-                            <th style="text-align: left; padding: 10px; border: 1px solid #ddd;">DESCRIPCIÓN</th>
-                            <th style="padding: 10px; border: 1px solid #ddd; width: 60px;">CANT.</th>
-                            <th style="text-align: right; padding: 10px; border: 1px solid #ddd; width: 80px;">P. UNITARIO</th>
-                            <th style="text-align: right; padding: 10px; border: 1px solid #ddd; width: 80px;">TOTAL</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        // Agregar items del carrito (altura dinámica)
-        saleDetails.forEach(item => {
-            receiptContent += `
-                <tr>
-                    <td style="text-align: left; padding: 10px; border: 1px solid #eee;">${item.nombre} (${item.talla}/${item.color})</td>
-                    <td style="text-align: center; padding: 10px; border: 1px solid #eee;">${item.qty}</td>
-                    <td style="text-align: right; padding: 10px; border: 1px solid #eee;">Q${Number(item.precio_venta).toFixed(2)}</td>
-                    <td style="text-align: right; padding: 10px; border: 1px solid #eee;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
-                </tr>
-            `;
-        });
-        
-        receiptContent += `
-                    </tbody>
-                </table>
-                
-                <div style="width: 300px; margin-left: auto;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <p style="font-weight: normal; margin: 0;">SUBTOTAL:</p>
-                        <p style="font-weight: normal; margin: 0;">Q${total.toFixed(2)}</p>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-top: 1px solid #ccc; padding-top: 8px;">
-                        <h3 style="margin: 0;">TOTAL:</h3>
-                        <h3 style="margin: 0; color: #007bff;">Q${total.toFixed(2)}</h3>
-                    </div>
-                </div>
-                
-                <div style="text-align: center; margin-top: 50px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 10px; color: #7f8c8d;">
-                    <p style="margin: 0;">¡Gracias por su compra! Visítenos en ${CONTACT_INFO}</p>
-                </div>
-            </div>
-        `;
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Ticket - ${userName}</title>
+                    <style>
+                        @page { size: 80mm auto; margin: 0; }
+                        body { 
+                            width: 72mm; 
+                            margin: 0 auto; 
+                            padding: 3mm; 
+                            font-family: 'Courier New', Courier, monospace;
+                            font-size: 13px;
+                            color: #000;
+                        }
+                        .text-center { text-align: center; }
+                        .text-right { text-align: right; }
+                        .divider { border-top: 1px dashed #000; margin: 6px 0; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+                        th { border-bottom: 1px solid #000; font-size: 11px; }
+                        td { padding: 3px 0; }
+                        .info-extra { font-size: 11px; margin-bottom: 2px; }
+                        .total-label { font-size: 16px; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    ${ticketElement.innerHTML}
+                </body>
+            </html>
+        `);
 
-        // Opciones de conversión para formato A4
-        const opt = {
-            margin: [5, 5, 5, 5], 
-            filename: `recibo_${Date.now()}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 }, 
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } 
-        };
+        printWindow.document.close();
+        printWindow.focus();
         
-        html2pdf().from(receiptContent).set(opt).save();
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
     };
 
     // 3. Cobrar (Checkout) - MEJORADO
@@ -144,7 +119,6 @@ const PointOfSale = () => {
         try {
             const token = localStorage.getItem('authToken');
             
-            // 5a. Descontar stock en el backend (registra la venta y el user_id)
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
@@ -152,13 +126,11 @@ const PointOfSale = () => {
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
             
-            // 5b. Generar el PDF antes de borrar el carrito
-            generateReceipt(cart, grandTotal);
+            handlePrintTicket();
 
-            setSuccessMsg("¡Venta exitosa! Recibo generado.");
+            setSuccessMsg("¡Venta completada!");
             setCart([]); 
             
-            // 5c. Recargar inventario para reflejar el stock
             const response = await API.get('/inventory/inventory', { headers: { Authorization: `Bearer ${token}` }});
             setInventory(response.data);
 
@@ -174,33 +146,19 @@ const PointOfSale = () => {
         }
     };
 
-
-    // 4. Manejador de Atajos (F2 y F9)
     const handleKeyDown = (event) => {
-        // Bloqueamos atajos si un campo de texto diferente al escáner está activo
-        if (document.activeElement !== inputRef.current && (document.activeElement.type === 'text' || document.activeElement.type === 'email')) {
-            return;
-        }
-
-        // F2: Enfocar el escáner
         if (event.key === 'F2') {
             event.preventDefault(); 
-            if (inputRef.current) {
-                inputRef.current.focus();
-            }
+            if (inputRef.current) inputRef.current.focus();
         }
-
-        // F9: Procesar Venta (Checkout)
         if (event.key === 'F9') {
             event.preventDefault(); 
             handleCheckout(); 
         }
     };
 
-    // 5. Agregar al carrito y manejo de escaneo
     const addProductToCart = (code) => {
         setError(null);
-        setSuccessMsg(null);
         const product = inventory.find(p => p.codigo_barras === code);
         if (!product) { setError("Producto no encontrado."); return; }
         if (product.cantidad <= 0) { setError(`¡Sin stock de ${product.nombre}!`); return; }
@@ -214,9 +172,6 @@ const PointOfSale = () => {
         }
     };
 
-    const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
-    
-    // Escuchar el Enter del escáner
     const handleScan = (e) => {
         if (e.key === 'Enter') {
             addProductToCart(barcode);
@@ -224,112 +179,108 @@ const PointOfSale = () => {
         }
     };
 
-    // Escuchar atajos al montar/desmontar
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [cart, inventory, loading]); 
 
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [handleCheckout]); // Dependencia en handleCheckout para que F9 funcione
-
-
-    // --- RENDERIZADO CON FLEXBOX (100% DE PANTALLA) ---
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', flexShrink: 0 }}>
-                🛒 Punto de Venta
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', p: 2 }}>
+            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                🛒 POS Potter's Store
             </Typography>
 
-            {/* ZONA DE TRABAJO */}
-            <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden', pb: 1 }}>
+            <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden' }}>
                 
-                {/* 🟢 COLUMNA IZQUIERDA (Escáner) */}
-                <Paper elevation={3} sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <Typography variant="h6" gutterBottom>Escáner (Atajo: F2)</Typography>
-                    
+                {/* INTERFAZ POS */}
+                <Paper elevation={3} sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <TextField
                         inputRef={inputRef}
                         autoFocus fullWidth
-                        label="Escanear Código de Barras aquí..." variant="outlined"
+                        label="Escanear Producto..."
                         value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={handleScan}
                         sx={{ mb: 2 }}
                     />
-
-                    {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
-                    {successMsg && <Alert severity="success" sx={{ mb: 1 }}>{successMsg}</Alert>}
+                    {error && <Alert severity="error">{error}</Alert>}
+                    {successMsg && <Alert severity="success">{successMsg}</Alert>}
                     
-                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>Recientes:</Typography>
-                    
-                    {/* Lista con scroll independiente */}
-                    <Box sx={{ mt: 1, flexGrow: 1, overflowY: 'auto', pr: 1 }}>
+                    <Box sx={{ mt: 2, flexGrow: 1, overflowY: 'auto' }}>
                         {cart.slice().reverse().map((item, index) => (
                             <Box key={index} sx={{ p: 1, borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
-                                <Typography fontWeight="bold" color="green">+ {item.nombre}</Typography>
-                                <Typography>{formatCurrency(item.precio_venta)}</Typography>
+                                <Typography>{item.nombre}</Typography>
+                                <Typography fontWeight="bold">{formatCurrency(item.precio_venta)}</Typography>
                             </Box>
                         ))}
                     </Box>
                 </Paper>
 
-                {/* 🔵 COLUMNA DERECHA (Ticket) */}
-                <Paper elevation={3} sx={{ p: 2, width: '40%', minWidth: '350px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', overflow: 'hidden' }}>
-                    <Typography variant="h6" sx={{ borderBottom: '1px solid #ccc', pb: 1, flexShrink: 0 }}>Ticket de Venta</Typography>
-
-                    {/* Tabla con scroll independiente */}
-                    <TableContainer sx={{ flexGrow: 1, overflowY: 'auto' }}>
-                        <Table size="small" stickyHeader>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={{ bgcolor: '#f8f9fa' }}>Prod</TableCell>
-                                    <TableCell sx={{ bgcolor: '#f8f9fa' }}>Cant</TableCell>
-                                    <TableCell sx={{ bgcolor: '#f8f9fa' }}>Total</TableCell>
-                                    <TableCell sx={{ bgcolor: '#f8f9fa' }}></TableCell>
-                                </TableRow>
-                            </TableHead>
+                {/* TICKET EN PANTALLA */}
+                <Paper elevation={3} sx={{ p: 2, width: '400px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa' }}>
+                    <TableContainer sx={{ flexGrow: 1 }}>
+                        <Table size="small">
+                            <TableHead><TableRow><TableCell>Prod</TableCell><TableCell>Cant</TableCell><TableCell>Total</TableCell><TableCell></TableCell></TableRow></TableHead>
                             <TableBody>
                                 {cart.map((item) => (
                                     <TableRow key={item.id}>
                                         <TableCell>{item.nombre}</TableCell>
                                         <TableCell>{item.qty}</TableCell>
                                         <TableCell>{formatCurrency(item.precio_venta * item.qty)}</TableCell>
-                                        <TableCell><IconButton size="small" color="error" onClick={() => removeFromCart(item.id)}><DeleteIcon /></IconButton></TableCell>
+                                        <TableCell><IconButton color="error" onClick={() => setCart(cart.filter(i => i.id !== item.id))}><DeleteIcon/></IconButton></TableCell>
                                     </TableRow>
                                 ))}
-                                {cart.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={4} align="center" sx={{ py: 10, color: '#aaa' }}>
-                                            <ShoppingCartIcon sx={{ fontSize: 60, mb: 2, opacity: 0.5 }} /><br/>
-                                            El carrito está vacío
-                                        </TableCell>
-                                    </TableRow>
-                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>
-
-                    {/* Sección de Totales (Fija al fondo) */}
-                    <Box sx={{ mt: 'auto', pt: 2, borderTop: '2px dashed #ccc', flexShrink: 0 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                            <Typography variant="h4" fontWeight="bold">TOTAL:</Typography>
-                            <Typography variant="h4" fontWeight="bold" color="primary">{formatCurrency(grandTotal)}</Typography>
-                        </Box>
-                        <Button 
-                            variant="contained" 
-                            color="success" 
-                            fullWidth 
-                            size="large" 
-                            onClick={handleCheckout} 
-                            disabled={loading || cart.length===0} 
-                            sx={{ py: 2, fontSize: '1.2rem' }}
-                        >
-                            {loading ? <CircularProgress size={24} color="inherit"/> : 'COBRAR (F9)'}
-                        </Button>
+                    <Box sx={{ p: 2 }}>
+                        <Typography variant="h5" align="right">Total: {formatCurrency(grandTotal)}</Typography>
+                        <Button variant="contained" color="success" fullWidth size="large" onClick={handleCheckout} disabled={cart.length === 0} sx={{ mt: 2 }}>COBRAR (F9)</Button>
                     </Box>
                 </Paper>
-
             </Box>
+
+            {/* TICKET FÍSICO OCULTO */}
+            <div id="seccion-ticket" style={{ display: 'none' }}>
+                <div className="text-center">
+                    <h2 style={{ margin: 0 }}>POTTER'S STORE</h2>
+                    <p className="info-extra">San Pedro Sacatepéquez, Guate</p>
+                    <div className="divider"></div>
+                    <p className="info-extra">Atendido por: {userName}</p>
+                    <p className="info-extra">Ticket: #{Date.now().toString().slice(-6)}</p>
+                    <p className="info-extra">{new Date().toLocaleString('es-GT')}</p>
+                </div>
+                
+                <div className="divider"></div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th align="left">PRODUCTO</th>
+                            <th align="center">CANT</th>
+                            <th align="right">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {cart.map((item) => (
+                            <tr key={item.id}>
+                                <td style={{fontSize: '11px'}}>{item.nombre.toUpperCase()}</td>
+                                <td align="center">{item.qty}</td>
+                                <td align="right">Q{(item.precio_venta * item.qty).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                
+                <div className="divider"></div>
+                
+                <div className="text-right total-label">
+                    TOTAL: {formatCurrency(grandTotal)}
+                </div>
+                
+                <div className="text-center" style={{ marginTop: '15px', fontSize: '10px' }}>
+                    <p>*** ¡Gracias por su compra! ***</p>
+                    <p>No se aceptan cambios sin ticket</p>
+                </div>
+            </div>
         </Box>
     );
 };

@@ -1,0 +1,41 @@
+/* src/Ticket.css */
+@media print {
+    @page {
+        size: 80mm auto; /* Ancho de la Niimbot K3 */
+        margin: 0;
+    }
+
+    /* Ocultamos todo el sitio web al imprimir */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Solo mostramos el ticket */
+    #seccion-ticket, #seccion-ticket * {
+        visibility: visible;
+    }
+
+    #seccion-ticket {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 80mm;
+        padding: 4mm;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.2;
+        color: #000;
+    }
+
+    .ticket-header { text-align: center; margin-bottom: 10px; }
+    .ticket-divider { border-top: 1px dashed #000; margin: 5px 0; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+}
+
+/* Estilo para que NO se vea en la pantalla mientras trabajas */
+@media screen {
+    #seccion-ticket {
+        display: none;
+    }
+}
