@@ -197,18 +197,23 @@ router.post('/scan-in', authenticateToken, async (req, res) => {
 // 6. SALIDA DE STOCK / VENTA (POST /scan-out)
 // Resta de la tabla inventario
 // ---------------------------------------------------------------------
+// backend/routes/inventory.js (Solo la parte de scan-out)
+
+// --- 6. REGISTRAR VENTA (Salida de Stock - POS) ---
 router.post('/scan-out', authenticateToken, async (req, res) => {
-    const { codigo_barras, cantidad = 1 } = req.body;
-    // Manejo seguro del ID de usuario
-    const userId = req.user ? req.user.userId : null; 
+    // 🟢 CAMBIO: Ahora recibimos 'precio_venta' desde el frontend (opcional)
+    const { codigo_barras, cantidad = 1, precio_venta } = req.body;
     
+    const userId = req.user ? req.user.userId : null; 
     const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
 
     try {
         await db.query('BEGIN');
 
+        // 1. Verificar existencia y stock
+        // Traemos el precio de la BD solo como referencia o respaldo
         const checkQuery = `
-            SELECT i.producto_id, i.cantidad, p.precio_venta 
+            SELECT i.producto_id, i.cantidad, p.precio_venta as precio_base, p.nombre
             FROM inventario i
             JOIN productos p ON i.producto_id = p.id
             WHERE p.codigo_barras = $1
@@ -217,28 +222,31 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
 
         if (check.rows.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Producto no encontrado o sin stock registrado.' });
+            return res.status(404).json({ error: 'Producto no encontrado o sin stock.' });
         }
 
-        const { producto_id, cantidad: stockActual, precio_venta } = check.rows[0];
+        const { producto_id, cantidad: stockActual, precio_base, nombre } = check.rows[0];
 
         if (stockActual < cantidad) {
             await db.query('ROLLBACK');
-            return res.status(400).json({ error: `Stock insuficiente. Disponible: ${stockActual}` });
+            return res.status(400).json({ error: `Stock insuficiente de ${nombre}. Disponible: ${stockActual}` });
         }
 
-        // Restar inventario
+        // 2. Definir el precio final: Si enviaste uno (descuento), usa ese. Si no, usa el de la BD.
+        const precioFinal = precio_venta ? parseFloat(precio_venta) : parseFloat(precio_base);
+
+        // 3. Restar inventario
         const update = await db.query(
             'UPDATE inventario SET cantidad = cantidad - $1 WHERE producto_id = $2 RETURNING cantidad',
             [cantidad, producto_id]
         );
 
-        // Guardar historial si hay usuario (POS)
+        // 4. Guardar historial con el PRECIO FINAL REAL
         if (userId) {
-            const totalVenta = precio_venta * cantidad;
+            const totalVenta = precioFinal * cantidad;
             await db.query(
                 'INSERT INTO historial_ventas (producto_id, cantidad, precio_unitario, total_venta, user_id) VALUES ($1, $2, $3, $4, $5)',
-                [producto_id, cantidad, precio_venta, totalVenta, userId]
+                [producto_id, cantidad, precioFinal, totalVenta, userId]
             );
         }
 
@@ -248,7 +256,7 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Error en scan-out:', error);
-        res.status(500).json({ error: 'Error interno.' });
+        res.status(500).json({ error: 'Error interno al procesar venta.' });
     }
 });
 
