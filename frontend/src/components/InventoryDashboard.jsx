@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // 1. Importamos useRef
 import API from '../api/axiosInstance';
 import { 
     Container, Typography, CircularProgress, Alert, Paper, 
@@ -11,7 +11,7 @@ import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete'; 
 import EditIcon from '@mui/icons-material/Edit'; 
-import CloseIcon from '@mui/icons-material/Close'; // Icono para cerrar zoom
+import CloseIcon from '@mui/icons-material/Close'; 
 import CreateProductModal from './CreateProductModal'; 
 
 const InventoryDashboard = () => {
@@ -22,25 +22,21 @@ const InventoryDashboard = () => {
     const [searchTerm, setSearchTerm] = useState(''); 
     const [userRole, setUserRole] = useState('');
     
-    // Estados Modales Gestión
+    // Estados Modales
     const [openCreateModal, setOpenCreateModal] = useState(false);
     const [modalData, setModalData] = useState(null);
-    
-    // Estados Lógica Escáner
     const [scannedCode, setScannedCode] = useState('');
     const [confirmNewOpen, setConfirmNewOpen] = useState(false);
-    
-    // Estados Acciones
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [productToDelete, setProductToDelete] = useState(null);
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [addQuantity, setAddQuantity] = useState('');
-
-    // 🟢 NUEVO ESTADO: Para ver la imagen en grande
     const [viewImage, setViewImage] = useState(null);
 
-    // --- CARGAR INVENTARIO ---
+    // 2. REFERENCIA AL INPUT (El truco para el auto-focus)
+    const searchInputRef = useRef(null);
+
     const fetchInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -49,7 +45,6 @@ const InventoryDashboard = () => {
                 const userObj = JSON.parse(userStr);
                 setUserRole(userObj.rol || '');
             }
-
             const response = await API.get('/inventory/inventory', {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -66,6 +61,19 @@ const InventoryDashboard = () => {
     useEffect(() => {
         fetchInventory();
     }, []);
+
+    // 3. EFECTO DE RE-ENFOQUE AUTOMÁTICO
+    // Cada vez que se cierra un modal (cualquiera de ellos), el cursor regresa al buscador.
+    useEffect(() => {
+        if (!openCreateModal && !stockModalOpen && !confirmNewOpen && !deleteConfirmOpen && !viewImage) {
+            // Damos 100ms para que la animación del modal termine y el foco no se pierda
+            setTimeout(() => {
+                if (searchInputRef.current) {
+                    searchInputRef.current.focus();
+                }
+            }, 100);
+        }
+    }, [openCreateModal, stockModalOpen, confirmNewOpen, deleteConfirmOpen, viewImage]);
 
     // --- LÓGICA DE ESCANEO ---
     const handleSearchKeyDown = (e) => {
@@ -166,9 +174,12 @@ const InventoryDashboard = () => {
                 </Button>
             </Box>
 
+            {/* BARRA DE BÚSQUEDA CON AUTO-FOCUS */}
             <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', border: '1px solid #ddd' }}>
                 <SearchIcon sx={{ color: 'primary.main', mr: 1 }} />
                 <TextField
+                    inputRef={searchInputRef} // 4. Conectamos la referencia aquí
+                    autoFocus // Foco inicial al cargar
                     fullWidth 
                     variant="standard" 
                     placeholder="Escanear código o buscar por nombre..."
@@ -198,7 +209,6 @@ const InventoryDashboard = () => {
                         {filteredInventory.map((product) => (
                             <TableRow key={product.id} hover>
                                 <TableCell>
-                                    {/* 🟢 AL HACER CLIC, SE ABRE EL ZOOM */}
                                     <Tooltip title="Ver imagen grande">
                                         <Avatar 
                                             src={product.imagen_url} 
@@ -249,7 +259,6 @@ const InventoryDashboard = () => {
 
             {/* --- MODALES --- */}
 
-            {/* 1. Confirmar Código Nuevo */}
             <Dialog open={confirmNewOpen} onClose={() => setConfirmNewOpen(false)}>
                 <DialogTitle>Producto no encontrado</DialogTitle>
                 <DialogContent>
@@ -264,7 +273,6 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 2. Sumar Stock */}
             <Dialog open={stockModalOpen} onClose={() => setStockModalOpen(false)}>
                 <DialogTitle>Ingreso de Mercadería</DialogTitle>
                 <DialogContent>
@@ -278,6 +286,9 @@ const InventoryDashboard = () => {
                     <TextField
                         autoFocus label="Cantidad a sumar (+)" type="number" fullWidth
                         value={addQuantity} onChange={(e) => setAddQuantity(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateStock(); // Permite guardar con Enter
+                        }}
                     />
                 </DialogContent>
                 <DialogActions>
@@ -286,7 +297,6 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 3. Confirmar Eliminación */}
             <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
                 <DialogTitle>¿Eliminar Producto?</DialogTitle>
                 <DialogContent>
@@ -298,18 +308,13 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 🟢 4. MODAL VISUALIZADOR DE IMAGEN (ZOOM) */}
             <Dialog 
                 open={!!viewImage} 
                 onClose={() => setViewImage(null)} 
                 maxWidth="md"
-                // Fondo transparente oscuro
-                PaperProps={{
-                    style: { backgroundColor: 'transparent', boxShadow: 'none' },
-                }}
+                PaperProps={{ style: { backgroundColor: 'transparent', boxShadow: 'none' } }}
             >
                 <Box position="relative" display="flex" justifyContent="center" alignItems="center">
-                    {/* Botón X flotante para cerrar */}
                     <IconButton 
                         onClick={() => setViewImage(null)}
                         sx={{ 
@@ -320,21 +325,14 @@ const InventoryDashboard = () => {
                     >
                         <CloseIcon />
                     </IconButton>
-                    
                     <img 
                         src={viewImage} 
                         alt="Zoom" 
-                        style={{ 
-                            maxWidth: '90vw', 
-                            maxHeight: '85vh', 
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)' 
-                        }} 
+                        style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }} 
                     />
                 </Box>
             </Dialog>
 
-            {/* 5. MODAL FORMULARIO (Crear/Editar) */}
             <CreateProductModal 
                 open={openCreateModal} 
                 handleClose={() => setOpenCreateModal(false)} 
