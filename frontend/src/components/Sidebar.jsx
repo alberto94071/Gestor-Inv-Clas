@@ -4,8 +4,14 @@ import {
     Typography, Box, Divider, Avatar 
 } from '@mui/material';
 import { 
-    Inventory, PointOfSale, ExitToApp, ReceiptLong, 
-    Assessment, People // Iconos adicionales por si activas Reports/Users
+    Dashboard,      // Icono para Inicio
+    Inventory,      // Icono para Inventario
+    PointOfSale,    // Icono para POS
+    Assessment,     // Icono para Reportes
+    People,         // Icono para Usuarios
+    History,        // Icono para Auditoría
+    ReceiptLong,    // 🟢 Icono para Personalizar Recibo
+    ExitToApp       // Icono para Salir
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -15,22 +21,24 @@ const Sidebar = ({ handleLogout, user }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Menú base para todos los usuarios
+    // 1. Menú Básico (Para todos los usuarios)
     const menuItems = [
+        { text: 'Inicio', icon: <Dashboard />, path: '/' },
         { text: 'Inventario', icon: <Inventory />, path: '/inventory' },
         { text: 'Punto de Venta', icon: <PointOfSale />, path: '/pos' },
     ];
 
-    // Opciones EXCLUSIVAS para Administrador
+    // 2. Menú de Administrador (Se agregan si el rol es admin)
     if (user?.rol === 'admin') {
-        // Opción 1: Personalizar el Ticket (Nuevo requerimiento)
-        menuItems.push({ text: 'Personalizar Recibo', icon: <ReceiptLong />, path: '/admin-tools' });
+        // Separador visual en la lógica
         
-        // Opción 2: Reportes Avanzados (Si tienes el componente Reports.jsx)
+        // --- Lo que tenías antes ---
         menuItems.push({ text: 'Reportes Financieros', icon: <Assessment />, path: '/reports' });
-        
-        // Opción 3: Gestión de Usuarios (Si tienes el componente Users.jsx)
         menuItems.push({ text: 'Usuarios', icon: <People />, path: '/users' });
+        menuItems.push({ text: 'Auditoría', icon: <History />, path: '/audit' });
+
+        // --- 🟢 Lo NUEVO (Configuración del Recibo) ---
+        menuItems.push({ text: 'Personalizar Recibo', icon: <ReceiptLong />, path: '/admin-tools' });
     }
 
     return (
@@ -42,7 +50,7 @@ const Sidebar = ({ handleLogout, user }) => {
                 [`& .MuiDrawer-paper`]: { 
                     width: drawerWidth, 
                     boxSizing: 'border-box', 
-                    bgcolor: '#1a202c', // Color oscuro elegante
+                    bgcolor: '#1a202c', // Fondo oscuro profesional
                     color: 'white' 
                 },
             }}
@@ -75,7 +83,8 @@ const Sidebar = ({ handleLogout, user }) => {
                             mb: 1, 
                             mx: 1, 
                             borderRadius: 1,
-                            transition: 'background-color 0.2s'
+                            transition: 'background-color 0.2s',
+                            cursor: 'pointer'
                         }}
                     >
                         <ListItemIcon sx={{ color: 'white', minWidth: '40px' }}>
@@ -89,15 +98,16 @@ const Sidebar = ({ handleLogout, user }) => {
                 ))}
             </List>
 
-            {/* BOTÓN CERRAR SESIÓN (Al final) */}
+            {/* BOTÓN CERRAR SESIÓN (Fijo al final) */}
             <Box sx={{ mt: 'auto', p: 2 }}>
                 <Divider sx={{ bgcolor: '#4a5568', mb: 2 }} />
                 <ListItem 
                     button 
                     onClick={handleLogout} 
                     sx={{ 
-                        color: '#fc8181', // Rojo suave
+                        color: '#fc8181', // Rojo suave para indicar salida
                         borderRadius: 1,
+                        cursor: 'pointer',
                         '&:hover': { bgcolor: 'rgba(252, 129, 129, 0.1)' }
                     }}
                 >
