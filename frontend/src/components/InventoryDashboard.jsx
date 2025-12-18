@@ -9,17 +9,10 @@ import {
 } from '@mui/material';
 import { 
     Add, Search, Delete, Edit, Close, 
-    ArrowBack, ArrowForward, Assessment // Iconos nuevos
+    ArrowBack, ArrowForward, ImageNotSupported // Icono para cuando no hay foto
 } from '@mui/icons-material';
 
-// Asegúrate de tener este componente creado (el que te pasé en el paso anterior)
-// Si no lo tienes aún, el botón de "Reportes" no hará nada o dará error, 
-// puedes comentar la importación si prefieres agregarlo luego.
-// import AdminTools from './AdminTools'; 
 import CreateProductModal from './CreateProductModal'; 
-
-// Componente auxiliar simple para navegar a herramientas (si usas React Router)
-import { useNavigate } from 'react-router-dom'; 
 
 const InventoryDashboard = () => {
     // --- ESTADOS ---
@@ -31,7 +24,7 @@ const InventoryDashboard = () => {
     
     // Modales de Gestión
     const [openCreateModal, setOpenCreateModal] = useState(false);
-    const [modalData, setModalData] = useState(null); // Datos para editar o crear con código
+    const [modalData, setModalData] = useState(null); 
     
     // Lógica Escáner
     const [scannedCode, setScannedCode] = useState('');
@@ -44,13 +37,11 @@ const InventoryDashboard = () => {
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [addQuantity, setAddQuantity] = useState('');
 
-    // 🟢 GALERÍA DE IMÁGENES
-    // Guardamos el ÍNDICE de la lista filtrada, no el producto directo, para poder navegar
+    // 🟢 GALERÍA DE IMÁGENES (Índice de navegación)
     const [viewImageIndex, setViewImageIndex] = useState(null);
 
     // Auto-focus ref
     const searchInputRef = useRef(null);
-    const navigate = useNavigate(); // Para ir a AdminTools si usas rutas
 
     // --- CARGAR DATOS ---
     const fetchInventory = async () => {
@@ -83,7 +74,7 @@ const InventoryDashboard = () => {
         }
     }, [openCreateModal, stockModalOpen, confirmNewOpen, deleteConfirmOpen, viewImageIndex]);
 
-    // --- FILTRADO (Se ejecuta antes del render para usarlo en la galería) ---
+    // --- FILTRADO ---
     const filteredInventory = inventory.filter((item) => {
         const term = searchTerm.toLowerCase();
         return (
@@ -100,12 +91,10 @@ const InventoryDashboard = () => {
             const found = inventory.find(p => p.codigo_barras === code);
             
             if (found) {
-                // Producto existe -> Sumar Stock
                 setSelectedProduct(found);
                 setStockModalOpen(true);
                 setAddQuantity('');
             } else {
-                // Producto nuevo -> Crear (El backend le pondrá 1 unidad por defecto)
                 setScannedCode(code);
                 setConfirmNewOpen(true);
             }
@@ -113,7 +102,7 @@ const InventoryDashboard = () => {
         }
     };
 
-    // --- MANEJADORES DE GALERÍA ---
+    // --- MANEJADORES DE GALERÍA Y NAVEGACIÓN ---
     const handleNextImage = () => {
         if (viewImageIndex !== null && viewImageIndex < filteredInventory.length - 1) {
             setViewImageIndex(viewImageIndex + 1);
@@ -124,9 +113,22 @@ const InventoryDashboard = () => {
             setViewImageIndex(viewImageIndex - 1);
         }
     };
-    // Producto actual en la galería
-    const currentGalleryProduct = viewImageIndex !== null ? filteredInventory[viewImageIndex] : null;
 
+    // 🟢 NUEVO: Soporte para Teclado (Flechas y Escape)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (viewImageIndex === null) return; // Solo si el modal está abierto
+
+            if (e.key === 'ArrowRight') handleNextImage();
+            if (e.key === 'ArrowLeft') handlePrevImage();
+            if (e.key === 'Escape') setViewImageIndex(null);
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewImageIndex, filteredInventory]); // Dependencias importantes para que funcione al cambiar
+
+    const currentGalleryProduct = viewImageIndex !== null ? filteredInventory[viewImageIndex] : null;
 
     // --- MANEJADORES DE ACCIONES ---
     const handleOpenCreate = () => { setModalData(null); setOpenCreateModal(true); };
@@ -175,27 +177,15 @@ const InventoryDashboard = () => {
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
                     📦 Inventario
                 </Typography>
-                <Box>
-                    {/* Botón para ir a Reportes (Admin Tools) */}
-                    {userRole === 'admin' && (
-                        <Button 
-                            variant="outlined" 
-                            startIcon={<Assessment />} 
-                            onClick={() => navigate('/admin-tools')} // Asumiendo que creaste esta ruta
-                            sx={{ mr: 2 }}
-                        >
-                            Reportes
-                        </Button>
-                    )}
-                    <Button 
-                        variant="contained" 
-                        startIcon={<Add />} 
-                        onClick={handleOpenCreate}
-                        sx={{ borderRadius: 2 }}
-                    >
-                        Nuevo
-                    </Button>
-                </Box>
+                
+                <Button 
+                    variant="contained" 
+                    startIcon={<Add />} 
+                    onClick={handleOpenCreate}
+                    sx={{ borderRadius: 2 }}
+                >
+                    Nuevo Producto
+                </Button>
             </Box>
 
             {/* BUSCADOR */}
@@ -233,12 +223,13 @@ const InventoryDashboard = () => {
                                         <Avatar 
                                             src={product.imagen_url} 
                                             variant="rounded" 
-                                            // 🟢 Al hacer clic, pasamos el ÍNDICE de la lista filtrada
-                                            onClick={() => { if(product.imagen_url) setViewImageIndex(index) }}
+                                            // 🟢 CORRECCIÓN: Quitamos la condición `if(product.imagen_url)`
+                                            // Ahora siempre abre el modal, tenga foto o no.
+                                            onClick={() => setViewImageIndex(index)}
                                             sx={{ 
                                                 width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd',
-                                                cursor: product.imagen_url ? 'pointer' : 'default',
-                                                transition: 'transform 0.2s', '&:hover': product.imagen_url ? { transform: 'scale(1.1)' } : {}
+                                                cursor: 'pointer', // Siempre puntero
+                                                transition: 'transform 0.2s', '&:hover': { transform: 'scale(1.1)' }
                                             }}
                                         >
                                             {product.nombre.charAt(0)}
@@ -314,7 +305,7 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 🟢 4. GALERÍA INTELIGENTE (ZOOM) */}
+            {/* 🟢 4. GALERÍA INTELIGENTE MEJORADA */}
             <Dialog 
                 open={viewImageIndex !== null} 
                 onClose={() => setViewImageIndex(null)} 
@@ -323,13 +314,16 @@ const InventoryDashboard = () => {
             >
                 <Box position="relative" display="flex" justifyContent="center" alignItems="center" height="80vh" width="90vw">
                     
-                    {/* Botón ATRÁS */}
+                    {/* Botón ATRÁS (Flecha Izquierda) */}
                     <IconButton 
-                        onClick={handlePrevImage} disabled={viewImageIndex === 0}
+                        onClick={handlePrevImage} 
+                        // Solo se deshabilita si es el primero absoluto
+                        disabled={viewImageIndex === 0}
                         sx={{ 
                             position: 'absolute', left: 0, zIndex: 10,
                             color: 'white', bgcolor: 'rgba(0,0,0,0.5)', 
                             '&:hover':{bgcolor:'white', color:'black'},
+                            // Ocultar si está deshabilitado para que no estorbe
                             visibility: viewImageIndex === 0 ? 'hidden' : 'visible'
                         }}
                     >
@@ -341,16 +335,30 @@ const InventoryDashboard = () => {
                         <Box sx={{ 
                             position: 'relative', bgcolor: 'white', borderRadius: 2, 
                             display: 'flex', flexDirection: 'column', alignItems: 'center',
-                            overflow: 'hidden', maxHeight: '80vh', maxWidth: '80vw'
+                            overflow: 'hidden', maxHeight: '80vh', maxWidth: '80vw',
+                            zIndex: 5
                         }}>
-                            {/* Imagen */}
-                            <img 
-                                src={currentGalleryProduct.imagen_url} 
-                                alt="Zoom" 
-                                style={{ maxHeight: '65vh', maxWidth: '100%', objectFit: 'contain', backgroundColor: '#f5f5f5' }} 
-                            />
+                            {/* Zona de Imagen */}
+                            <Box sx={{ 
+                                width: '100%', height: '60vh', display: 'flex', 
+                                justifyContent: 'center', alignItems: 'center', bgcolor: '#f5f5f5' 
+                            }}>
+                                {currentGalleryProduct.imagen_url ? (
+                                    <img 
+                                        src={currentGalleryProduct.imagen_url} 
+                                        alt="Zoom" 
+                                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                                    />
+                                ) : (
+                                    // 🟢 Si no tiene foto, mostramos un icono grande y bonito
+                                    <Box display="flex" flexDirection="column" alignItems="center" color="text.secondary">
+                                        <ImageNotSupported sx={{ fontSize: 100, opacity: 0.3 }} />
+                                        <Typography variant="caption">Sin Imagen</Typography>
+                                    </Box>
+                                )}
+                            </Box>
                             
-                            {/* Panel de Info (Nombre y Disponibilidad) */}
+                            {/* Panel de Info */}
                             <Box sx={{ p: 2, width: '100%', bgcolor: 'white', borderTop: '1px solid #eee', textAlign: 'center' }}>
                                 <Typography variant="h5" fontWeight="bold">{currentGalleryProduct.nombre}</Typography>
                                 <Typography variant="subtitle1" color="textSecondary">{currentGalleryProduct.marca}</Typography>
@@ -364,6 +372,9 @@ const InventoryDashboard = () => {
                                         Existencia: {currentGalleryProduct.cantidad}
                                     </Typography>
                                 </Box>
+                                <Typography variant="caption" display="block" sx={{ mt: 1, color: '#aaa' }}>
+                                    (Usa las flechas del teclado ⬅️ ➡️ para navegar)
+                                </Typography>
                             </Box>
 
                             {/* Botón Cerrar (X) */}
@@ -376,9 +387,11 @@ const InventoryDashboard = () => {
                         </Box>
                     )}
 
-                    {/* Botón SIGUIENTE */}
+                    {/* Botón SIGUIENTE (Flecha Derecha) */}
                     <IconButton 
-                        onClick={handleNextImage} disabled={viewImageIndex === filteredInventory.length - 1}
+                        onClick={handleNextImage} 
+                        // Solo se deshabilita si es el último absoluto
+                        disabled={viewImageIndex === filteredInventory.length - 1}
                         sx={{ 
                             position: 'absolute', right: 0, zIndex: 10,
                             color: 'white', bgcolor: 'rgba(0,0,0,0.5)', 
