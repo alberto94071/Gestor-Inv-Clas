@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Box, Paper, Typography, TextField, Button, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip
+    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip, Snackbar
 } from '@mui/material';
 import { 
     Delete, RemoveCircleOutline, AddCircleOutline, 
@@ -35,7 +35,7 @@ const PointOfSale = () => {
     // Total Dinámico (Precio Modificado * Cantidad)
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-    // --- 1. CARGA INICIAL ---
+    // --- 1. CARGA INICIAL Y REVISIÓN DE CARRITO EXTERNO ---
     const loadInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -52,10 +52,25 @@ const PointOfSale = () => {
     useEffect(() => {
         loadInventory();
         focusInput();
+
+        // 🟢 NUEVO: Revisar si el Inventario nos mandó productos (F3)
+        const storedTempCart = localStorage.getItem('pos_cart_temp');
+        if (storedTempCart) {
+            try {
+                const parsedCart = JSON.parse(storedTempCart);
+                if (Array.isArray(parsedCart) && parsedCart.length > 0) {
+                    setCart(parsedCart);
+                    setSuccessMsg("Productos cargados desde el Inventario");
+                    // Limpiamos la memoria para que no se vuelvan a cargar al recargar la página
+                    localStorage.removeItem('pos_cart_temp');
+                }
+            } catch (e) {
+                console.error("Error al leer carrito temporal", e);
+            }
+        }
     }, []);
 
     const focusInput = () => {
-        // Pequeño delay para asegurar que el DOM esté listo
         setTimeout(() => {
             if (inputRef.current) inputRef.current.focus();
         }, 100);
@@ -90,6 +105,7 @@ const PointOfSale = () => {
     // Cambiar Cantidad (+ / -) con validación de Stock
     const updateQuantity = (id, newQty, maxStock) => {
         if (newQty < 1) return;
+        // Opcional: Si quieres permitir vender sin stock, comenta el siguiente if
         if (newQty > maxStock) {
             setError(`Stock insuficiente. Disponible: ${maxStock}`);
             return;
@@ -153,7 +169,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 4. IMPRESIÓN EXACTA AL PDF ---
+    // --- 4. IMPRESIÓN EXACTA AL PDF (DISEÑO FINAL) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -171,7 +187,7 @@ const PointOfSale = () => {
             // Cálculo de totales para el ticket
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-            // HTML ESTRUCTURADO COMO EL PDF
+            // HTML ESTRUCTURADO EXACTAMENTE COMO TU PDF
             const html = `
                 <html>
                 <head>
@@ -183,7 +199,7 @@ const PointOfSale = () => {
                             margin: 0 auto; 
                             padding: 5mm 2mm; 
                             font-family: 'Courier New', Courier, monospace; 
-                            font-size: 12px;
+                            font-size: 11px;
                             color: #000;
                         }
                         .center { text-align: center; }
@@ -191,16 +207,23 @@ const PointOfSale = () => {
                         .right { text-align: right; }
                         .bold { font-weight: bold; }
                         
-                        /* Líneas divisorias estilo PDF */
-                        .divider { border-top: 1px dashed #000; margin: 5px 0; }
+                        /* Líneas divisorias punteadas exactas */
+                        .dashed-top { border-top: 1px dashed #000; }
+                        .dashed-bottom { border-bottom: 1px dashed #000; }
                         
-                        .header { margin-bottom: 10px; text-transform: uppercase; }
-                        .info-row { display: flex; justify-content: space-between; }
+                        .header { margin-bottom: 10px; }
+                        .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
                         
                         /* Tabla compacta */
-                        table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-                        th { text-align: left; border-bottom: 1px dashed #000; font-size: 11px; }
-                        td { vertical-align: top; font-size: 11px; padding: 2px 0; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
+                        th { 
+                            text-align: left; 
+                            border-bottom: 1px dashed #000; 
+                            border-top: 1px dashed #000;
+                            padding: 5px 0;
+                            font-size: 11px; 
+                        }
+                        td { vertical-align: top; font-size: 11px; padding: 4px 0; }
                         
                         .footer { margin-top: 15px; font-size: 10px; text-align: center; }
                         .qr-box { display: flex; justify-content: center; margin-top: 10px; }
@@ -208,49 +231,51 @@ const PointOfSale = () => {
                 </head>
                 <body>
                     <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
-                    <div class="center" style="font-size: 10px;">Comprobante de Compra</div>
-                    <div class="center" style="font-size: 10px;">Ticket ID: ${ticketId}</div>
+                    <div class="center">Comprobante de Compra</div>
+                    <div class="center">Ticket ID: ${ticketId}</div>
                     
-                    <div class="divider"></div>
+                    <br/>
                     
                     <div class="info-row"><span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span></div>
                     <div class="info-row"><span>Hora: ${new Date().toLocaleTimeString('es-GT')}</span></div>
-                    <div class="info-row"><span>Le atendió: ${localStorage.getItem('userName') || 'Cajero'}</span></div>
 
                     <table>
                         <thead>
                             <tr>
-                                <th style="width: 50%;">DESCRIPCIÓN</th>
-                                <th style="width: 15%; text-align: center;">CANT</th>
-                                <th style="width: 35%; text-align: right;">TOTAL</th>
+                                <th style="width: 45%;">DESCRIPCIÓN</th>
+                                <th style="width: 15%; text-align: center;">CANT.</th>
+                                <th style="width: 20%; text-align: right;">P.UNIT</th>
+                                <th style="width: 20%; text-align: right;">TOTAL</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${cartToPrint.map(item => `
                                 <tr>
-                                    <td>
-                                        ${item.nombre.toUpperCase()}
-                                        ${Number(item.precio_venta) !== Number(item.precio_base) ? '<br/><span style="font-size:9px">*(Desc)</span>' : ''}
-                                    </td>
+                                    <td>${item.nombre.toUpperCase()}</td>
                                     <td style="text-align: center;">${item.qty}</td>
+                                    <td style="text-align: right;">Q${Number(item.precio_venta).toFixed(2)}</td>
                                     <td style="text-align: right;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
 
-                    <div class="divider"></div>
-
-                    <div class="info-row bold" style="margin-top: 5px; font-size: 14px;">
-                        <span>TOTAL:</span>
-                        <span>Q${totalPrint.toFixed(2)}</span>
+                    <div class="dashed-top"></div>
+                    <div style="margin-top: 5px;">
+                        <div class="info-row">
+                            <span>SUBTOTAL:</span>
+                            <span>Q${totalPrint.toFixed(2)}</span>
+                        </div>
+                        <div class="info-row bold" style="font-size: 13px;">
+                            <span>TOTAL:</span>
+                            <span>Q${totalPrint.toFixed(2)}</span>
+                        </div>
                     </div>
-
-                    <div class="divider"></div>
+                    <div class="dashed-bottom" style="margin-top: 5px;"></div>
 
                     <div class="footer">
                         ${config.mensaje_final || "¡Gracias por su compra!"}<br/>
-                        ${config.direccion ? `${config.direccion}` : ''}<br/>
+                        ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
                         ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}<br/>
                         ${config.instagram_url ? `IG: @${config.nombre_empresa}` : ''}
                         
