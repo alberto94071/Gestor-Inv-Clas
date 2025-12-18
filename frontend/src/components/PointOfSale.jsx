@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { 
     Delete, RemoveCircleOutline, AddCircleOutline, 
-    ShoppingCart, Print 
+    ShoppingCart, Print, RemoveShoppingCart // Icono para cancelar
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
@@ -32,10 +32,10 @@ const PointOfSale = () => {
 
     const inputRef = useRef(null);
 
-    // Total Dinámico (Precio Modificado * Cantidad)
+    // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-    // --- 1. CARGA INICIAL Y REVISIÓN DE CARRITO EXTERNO ---
+    // --- 1. CARGA INICIAL Y GESTIÓN DE MEMORIA ---
     const loadInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -49,73 +49,88 @@ const PointOfSale = () => {
         }
     };
 
+    // Al iniciar: Cargar Inventario + Recuperar Carrito Guardado + Fusionar lo nuevo
     useEffect(() => {
         loadInventory();
         focusInput();
 
-        // 🟢 NUEVO: Revisar si el Inventario nos mandó productos (F3)
-        const storedTempCart = localStorage.getItem('pos_cart_temp');
-        if (storedTempCart) {
+        // A. Recuperar lo que ya tenías en el POS (Persistencia)
+        const savedCart = localStorage.getItem('pos_persistent_cart');
+        let finalCart = savedCart ? JSON.parse(savedCart) : [];
+
+        // B. Revisar si vienen productos nuevos desde el Inventario (F3)
+        const incomingTempCart = localStorage.getItem('pos_cart_temp');
+        
+        if (incomingTempCart) {
             try {
-                const parsedCart = JSON.parse(storedTempCart);
-                if (Array.isArray(parsedCart) && parsedCart.length > 0) {
-                    setCart(parsedCart);
-                    setSuccessMsg("Productos cargados desde el Inventario");
-                    // Limpiamos la memoria para que no se vuelvan a cargar al recargar la página
+                const newItems = JSON.parse(incomingTempCart);
+                if (Array.isArray(newItems) && newItems.length > 0) {
+                    
+                    // FUSIÓN INTELIGENTE:
+                    newItems.forEach(newItem => {
+                        const existingIndex = finalCart.findIndex(item => item.id === newItem.id);
+                        if (existingIndex >= 0) {
+                            // Si ya existe, sumamos la cantidad
+                            finalCart[existingIndex].qty += newItem.qty;
+                        } else {
+                            // Si no existe, lo agregamos
+                            finalCart.push(newItem);
+                        }
+                    });
+                    
+                    setSuccessMsg("Productos agregados desde el Inventario");
+                    // Limpiamos la memoria temporal (F3), pero mantenemos la persistente
                     localStorage.removeItem('pos_cart_temp');
                 }
             } catch (e) {
-                console.error("Error al leer carrito temporal", e);
+                console.error("Error al fusionar carritos", e);
             }
         }
+
+        // Guardamos el resultado final en el estado
+        setCart(finalCart);
+
     }, []);
 
+    // --- 2. AUTO-GUARDADO (Persistencia) ---
+    // Cada vez que cambies algo en el carrito, se guarda solo
+    useEffect(() => {
+        localStorage.setItem('pos_persistent_cart', JSON.stringify(cart));
+    }, [cart]);
+
     const focusInput = () => {
-        setTimeout(() => {
-            if (inputRef.current) inputRef.current.focus();
-        }, 100);
+        setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 100);
     };
 
-    // --- 2. LÓGICA DEL CARRITO ---
+    // --- 3. LÓGICA DEL CARRITO ---
 
     const addProductToCart = (code) => {
         setError(null);
         setSuccessMsg(null);
         const product = inventory.find(p => p.codigo_barras === code);
         
-        if (!product) { 
-            setError("Producto no encontrado."); 
-            return; 
-        }
-        if (product.cantidad <= 0) { 
-            setError(`¡Sin stock de ${product.nombre}!`); 
-            return; 
-        }
+        if (!product) { setError("Producto no encontrado."); return; }
+        if (product.cantidad <= 0) { setError(`¡Sin stock de ${product.nombre}!`); return; }
 
         const existingItem = cart.find(item => item.id === product.id);
         
         if (existingItem) {
             updateQuantity(existingItem.id, existingItem.qty + 1, product.cantidad);
         } else {
-            // Al agregar, usamos el precio base original
             setCart([...cart, { ...product, qty: 1 }]);
         }
     };
 
-    // Cambiar Cantidad (+ / -) con validación de Stock
+    // Modificar cantidad con botones (+/-)
     const updateQuantity = (id, newQty, maxStock) => {
         if (newQty < 1) return;
-        // Opcional: Si quieres permitir vender sin stock, comenta el siguiente if
-        if (newQty > maxStock) {
-            setError(`Stock insuficiente. Disponible: ${maxStock}`);
-            return;
-        }
+        if (newQty > maxStock) { setError(`Stock insuficiente. Máx: ${maxStock}`); return; }
         setError(null);
         setCart(cart.map(item => item.id === id ? { ...item, qty: newQty } : item));
         focusInput();
     };
 
-    // Cambiar Precio (Descuentos manuales)
+    // Modificar precio (Descuentos)
     const updatePrice = (id, newPrice) => {
         setCart(cart.map(item => item.id === id ? { ...item, precio_venta: newPrice } : item));
     };
@@ -129,7 +144,18 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 3. PROCESAR VENTA ---
+    // 🟢 NUEVO: CANCELAR VENTA (LIMPIAR TODO)
+    const handleCancelSale = () => {
+        if (cart.length === 0) return;
+        if (window.confirm("¿Estás seguro de cancelar esta venta y limpiar el carrito?")) {
+            setCart([]); // Limpia visualmente
+            localStorage.removeItem('pos_persistent_cart'); // Limpia memoria
+            setSuccessMsg("Venta cancelada.");
+            focusInput();
+        }
+    };
+
+    // --- 4. PROCESAR VENTA ---
     const handleCheckout = async () => {
         if (cart.length === 0) return;
         setLoading(true);
@@ -137,28 +163,28 @@ const PointOfSale = () => {
         try {
             const token = localStorage.getItem('authToken');
             
-            // Procesar cada ítem
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
                     cantidad: item.qty,
-                    precio_venta: item.precio_venta // Enviamos precio modificado
+                    precio_venta: item.precio_venta 
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
             
-            // Preparar datos para impresión y guardar respaldo
             const currentCart = [...cart];
-            const ticketId = Date.now(); // ID único para el ticket
+            const ticketId = Date.now();
             
             setLastSaleCart(currentCart);
             setLastTicketId(ticketId);
 
-            // Imprimir
             await handlePrintTicket(currentCart, ticketId);
 
             setSuccessMsg("¡Venta registrada con éxito!");
+            
+            // 🟢 Al cobrar con éxito, ahí sí limpiamos todo
             setCart([]); 
-            loadInventory(); // Recargar stock
+            localStorage.removeItem('pos_persistent_cart');
+            loadInventory();
 
         } catch (err) {
             const msg = err.response?.data?.error || "Error al procesar la venta.";
@@ -169,7 +195,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 4. IMPRESIÓN EXACTA AL PDF (DISEÑO FINAL) ---
+    // --- 5. IMPRESIÓN (DISEÑO PDF) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -179,52 +205,23 @@ const PointOfSale = () => {
             const config = res.data || {};
 
             const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                alert("Por favor permite ventanas emergentes para imprimir.");
-                return;
-            }
+            if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
-            // Cálculo de totales para el ticket
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-            // HTML ESTRUCTURADO EXACTAMENTE COMO TU PDF
             const html = `
                 <html>
                 <head>
                     <title>Ticket ${ticketId}</title>
                     <style>
                         @page { size: 80mm auto; margin: 0; }
-                        body { 
-                            width: 72mm; 
-                            margin: 0 auto; 
-                            padding: 5mm 2mm; 
-                            font-family: 'Courier New', Courier, monospace; 
-                            font-size: 11px;
-                            color: #000;
-                        }
-                        .center { text-align: center; }
-                        .left { text-align: left; }
-                        .right { text-align: right; }
-                        .bold { font-weight: bold; }
-                        
-                        /* Líneas divisorias punteadas exactas */
-                        .dashed-top { border-top: 1px dashed #000; }
-                        .dashed-bottom { border-bottom: 1px dashed #000; }
-                        
-                        .header { margin-bottom: 10px; }
+                        body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
+                        .center { text-align: center; } .bold { font-weight: bold; }
+                        .dashed-top { border-top: 1px dashed #000; } .dashed-bottom { border-bottom: 1px dashed #000; }
                         .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-                        
-                        /* Tabla compacta */
                         table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
-                        th { 
-                            text-align: left; 
-                            border-bottom: 1px dashed #000; 
-                            border-top: 1px dashed #000;
-                            padding: 5px 0;
-                            font-size: 11px; 
-                        }
+                        th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
                         td { vertical-align: top; font-size: 11px; padding: 4px 0; }
-                        
                         .footer { margin-top: 15px; font-size: 10px; text-align: center; }
                         .qr-box { display: flex; justify-content: center; margin-top: 10px; }
                     </style>
@@ -233,9 +230,7 @@ const PointOfSale = () => {
                     <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
                     <div class="center">Comprobante de Compra</div>
                     <div class="center">Ticket ID: ${ticketId}</div>
-                    
                     <br/>
-                    
                     <div class="info-row"><span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span></div>
                     <div class="info-row"><span>Hora: ${new Date().toLocaleTimeString('es-GT')}</span></div>
 
@@ -262,10 +257,6 @@ const PointOfSale = () => {
 
                     <div class="dashed-top"></div>
                     <div style="margin-top: 5px;">
-                        <div class="info-row">
-                            <span>SUBTOTAL:</span>
-                            <span>Q${totalPrint.toFixed(2)}</span>
-                        </div>
                         <div class="info-row bold" style="font-size: 13px;">
                             <span>TOTAL:</span>
                             <span>Q${totalPrint.toFixed(2)}</span>
@@ -278,7 +269,6 @@ const PointOfSale = () => {
                         ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
                         ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}<br/>
                         ${config.instagram_url ? `IG: @${config.nombre_empresa}` : ''}
-                        
                         ${config.instagram_url ? '<div class="qr-box"><div id="qr-code"></div></div>' : ''}
                     </div>
                 </body>
@@ -288,7 +278,6 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // Renderizado del QR
             if (config.instagram_url) {
                 printWindow.onload = () => {
                     const container = printWindow.document.getElementById('qr-code');
@@ -296,18 +285,10 @@ const PointOfSale = () => {
                         const root = createRoot(container);
                         root.render(<QRCode value={config.instagram_url} size={80} />);
                     }
-                    setTimeout(() => { 
-                        printWindow.focus();
-                        printWindow.print(); 
-                        printWindow.close(); 
-                    }, 800);
+                    setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
                 };
             } else {
-                setTimeout(() => { 
-                    printWindow.focus();
-                    printWindow.print(); 
-                    printWindow.close(); 
-                }, 500);
+                setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 500);
             }
 
         } catch (e) {
@@ -316,12 +297,10 @@ const PointOfSale = () => {
         }
     };
 
-    // Atajos de Teclado (F2 Scan, F9 Cobrar)
+    // Atajos de Teclado
     useEffect(() => {
         const handleKeyDown = (event) => {
-            // Ignorar F2/F9 si se está escribiendo en un input diferente al del escáner (ej: precio)
             if (document.activeElement.tagName === 'INPUT' && document.activeElement !== inputRef.current) return;
-
             if (event.key === 'F2') { event.preventDefault(); if (inputRef.current) inputRef.current.focus(); }
             if (event.key === 'F9') { event.preventDefault(); handleCheckout(); }
         };
@@ -337,7 +316,6 @@ const PointOfSale = () => {
                     🛒 Punto de Venta
                 </Typography>
                 
-                {/* Botón Re-imprimir Último */}
                 {lastSaleCart && (
                     <Button 
                         startIcon={<Print />} 
@@ -364,7 +342,7 @@ const PointOfSale = () => {
                     {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
                     {successMsg && <Alert severity="success" sx={{ mb: 1 }}>{successMsg}</Alert>}
                     
-                    {/* Lista rápida visual */}
+                    {/* Lista rápida visual (Sólo lectura) */}
                     <Box sx={{ mt: 1, flexGrow: 1, overflowY: 'auto', pr: 1 }}>
                         {cart.slice().reverse().map((item, index) => (
                             <Box key={index} sx={{ p: 1, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -409,7 +387,7 @@ const PointOfSale = () => {
                                             </Box>
                                         </TableCell>
                                         
-                                        {/* 1. CANTIDAD CON BOTONES (+/-) */}
+                                        {/* CANTIDAD EDITABLE (+/-) */}
                                         <TableCell align="center">
                                             <Box display="flex" alignItems="center" justifyContent="center">
                                                 <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty - 1, item.cantidad)} color="primary">
@@ -422,11 +400,10 @@ const PointOfSale = () => {
                                             </Box>
                                         </TableCell>
 
-                                        {/* 2. PRECIO EDITABLE (Para Descuentos) */}
+                                        {/* PRECIO EDITABLE */}
                                         <TableCell align="center">
                                             <TextField 
-                                                type="number" 
-                                                variant="standard"
+                                                type="number" variant="standard"
                                                 value={item.precio_venta}
                                                 onChange={(e) => updatePrice(item.id, e.target.value)}
                                                 InputProps={{
@@ -435,7 +412,7 @@ const PointOfSale = () => {
                                                     style: { fontWeight: 'bold', color: '#2e7d32', fontSize: '14px' }
                                                 }}
                                                 sx={{ width: '70px' }}
-                                                onClick={(e) => e.target.select()} // Seleccionar todo al hacer clic
+                                                onClick={(e) => e.target.select()}
                                             />
                                         </TableCell>
 
@@ -464,18 +441,30 @@ const PointOfSale = () => {
                         </Table>
                     </TableContainer>
 
-                    {/* TOTALES Y BOTÓN COBRAR */}
+                    {/* TOTALES Y ACCIONES */}
                     <Box sx={{ mt: 'auto', pt: 2, borderTop: '2px dashed #ccc', flexShrink: 0 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, px: 2 }}>
                             <Typography variant="h4" fontWeight="bold">TOTAL:</Typography>
                             <Typography variant="h4" fontWeight="bold" color="primary">{formatCurrency(total)}</Typography>
                         </Box>
+                        
+                        {/* Botón COBRAR */}
                         <Button 
                             variant="contained" color="success" fullWidth size="large" 
                             onClick={handleCheckout} disabled={loading || cart.length === 0} 
-                            sx={{ py: 2, fontSize: '1.4rem', fontWeight: 'bold', boxShadow: 3 }}
+                            sx={{ py: 1.5, fontSize: '1.2rem', fontWeight: 'bold', mb: 1, boxShadow: 3 }}
                         >
                             {loading ? <CircularProgress size={28} color="inherit"/> : 'COBRAR (F9)'}
+                        </Button>
+
+                        {/* 🟢 Botón CANCELAR VENTA */}
+                        <Button 
+                            variant="outlined" color="error" fullWidth 
+                            onClick={handleCancelSale} disabled={cart.length === 0}
+                            startIcon={<RemoveShoppingCart />}
+                            sx={{ fontWeight: 'bold', border: '2px solid' }}
+                        >
+                            CANCELAR VENTA
                         </Button>
                     </Box>
                 </Paper>
