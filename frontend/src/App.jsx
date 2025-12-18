@@ -12,6 +12,7 @@ import PointOfSale from './components/PointOfSale';
 import Reports from './components/Reports';
 import Users from './components/Users';
 import AuditLog from './components/AuditLog';
+import AdminTools from './components/AdminTools'; // 🟢 1. NUEVO COMPONENTE
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -77,7 +78,7 @@ function App() {
                             path="/login" 
                             element={
                                 !isAuthenticated ? (
-                                    <Login handleLogin={handleLogin} /> // 🛑 Aquí pasamos la función vital
+                                    <Login handleLogin={handleLogin} /> 
                                 ) : (
                                     <Navigate to="/" />
                                 )
@@ -91,12 +92,15 @@ function App() {
                                 <Route path="/inventory" element={<InventoryDashboard />} />
                                 <Route path="/pos" element={<PointOfSale />} />
                                 
-                                {/* Rutas solo para Admin (Protección visual básica) */}
+                                {/* Rutas solo para Admin */}
                                 {user?.rol === 'admin' && (
                                     <>
                                         <Route path="/reports" element={<Reports />} />
                                         <Route path="/users" element={<Users />} />
                                         <Route path="/audit" element={<AuditLog />} />
+                                        
+                                        {/* 🟢 2. NUEVA RUTA DE CONFIGURACIÓN */}
+                                        <Route path="/admin-tools" element={<AdminTools />} />
                                     </>
                                 )}
                                 
