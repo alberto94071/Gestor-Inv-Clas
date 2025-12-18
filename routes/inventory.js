@@ -1,35 +1,44 @@
-// gestor-inventario-ropa/routes/inventory.js
+// backend/routes/inventory.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db/db'); // Asegúrate que esta ruta sea correcta según tu estructura
-const authenticateToken = require('../middleware/auth'); 
-const checkAdminRole = require('../middleware/adminMiddleware'); 
+// Asegúrate de que esta ruta apunte a tu archivo de conexión real. 
+// Si tu archivo está en backend/db.js, usa '../db'. Si está en backend/db/db.js, usa '../db/db'.
+const db = require('../db/db'); 
+const authenticateToken = require('../middleware/auth');
+const checkAdminRole = require('../middleware/adminMiddleware');
 const logActivity = require('../middleware/logMiddleware');
 const { generateUniqueBarcode } = require('../utils/barcodeGenerator');
 
-// ---------------------------------------------------------------------
+// =====================================================================
 // 1. REGISTRAR PRODUCTO (POST /products)
-// CORREGIDO: Ahora acepta imagen_url y usa transacciones
-// ---------------------------------------------------------------------
+// Stock inicial por defecto = 1 (si no se especifica otro)
+// =====================================================================
 router.post('/products', authenticateToken, logActivity('Creación de Producto', 'productos'), async (req, res) => {
-    // 🟢 AQUÍ ESTABA EL ERROR: Agregamos 'imagen_url' al destructuring
     const { 
         nombre, marca, descripcion, precio_venta, 
-        talla, color, codigo_barras, stock_inicial, imagen_url 
+        talla, color, codigo_barras, imagen_url, stock_inicial 
     } = req.body;
 
+    // Validación mínima
     if (!nombre || !precio_venta) {
         return res.status(400).json({ error: 'Nombre y Precio de Venta son obligatorios.' });
     }
 
+    // Limpieza de código y generación si falta
     const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
     const finalCode = codigoLimpio || generateUniqueBarcode();
+
+    // 🟢 LÓGICA DE STOCK INICIAL: Si viene vacío, asignamos 1 por defecto.
+    let cantidadInicial = 1;
+    if (stock_inicial !== undefined && stock_inicial !== '' && stock_inicial !== null) {
+        const parsed = parseInt(stock_inicial);
+        if (!isNaN(parsed)) cantidadInicial = parsed;
+    }
 
     try {
         await db.query('BEGIN');
 
-        // A. Insertar Producto (Incluyendo imagen_url)
-        // Usamos (imagen_url || null) para evitar errores si no envían foto
+        // A. Insertar Producto en catálogo
         const productResult = await db.query(
             `INSERT INTO productos 
             (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url) 
@@ -38,24 +47,22 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
         );
         const newProductId = productResult.rows[0].id;
 
-        // B. Insertar en tabla INVENTARIO
-        let cantidad = 0;
-        if (stock_inicial) {
-            cantidad = parseInt(stock_inicial);
-            if (isNaN(cantidad)) cantidad = 0; 
-        }
-        
+        // B. Insertar en tabla INVENTARIO con la cantidad inicial (1 o la definida)
         await db.query(
             'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2)',
-            [newProductId, cantidad]
+            [newProductId, cantidadInicial]
         );
 
         await db.query('COMMIT');
-        res.status(201).json({ message: 'Producto registrado con éxito', producto: productResult.rows[0] });
+        res.status(201).json({ 
+            message: 'Producto registrado con éxito.', 
+            id: newProductId,
+            stock: cantidadInicial
+        });
 
     } catch (error) {
         await db.query('ROLLBACK');
-        console.error('Error al registrar producto:', error);
+        console.error('Error al registrar:', error);
         
         if (error.code === '23505') {
             return res.status(400).json({ error: 'El código de barras ya existe.' });
@@ -64,47 +71,39 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
     }
 });
 
-// ---------------------------------------------------------------------
+// =====================================================================
 // 2. CONSULTAR INVENTARIO (GET /inventory)
-// CORREGIDO: Ahora devuelve también la imagen_url
-// ---------------------------------------------------------------------
+// Devuelve productos con su stock e imagen
+// =====================================================================
 router.get('/inventory', authenticateToken, async (req, res) => {
     try {
         const query = `
             SELECT 
-                p.id,
-                p.nombre, 
-                p.marca, 
-                p.precio_venta, 
-                p.talla, 
-                p.color, 
-                p.codigo_barras, 
-                p.imagen_url, -- 🟢 Agregado para que se vea la foto en la tabla
+                p.id, p.nombre, p.marca, p.descripcion, p.precio_venta, 
+                p.talla, p.color, p.codigo_barras, p.imagen_url, p.fecha_creacion,
                 COALESCE(i.cantidad, 0) as cantidad
             FROM productos p
             LEFT JOIN inventario i ON p.id = i.producto_id
             ORDER BY 
-                CASE WHEN COALESCE(i.cantidad, 0) > 0 THEN 0 ELSE 1 END,
-                p.id DESC;
+                p.id DESC; -- Muestra los más recientes primero
         `;
         const result = await db.query(query);
         res.json(result.rows);
     } catch (error) {
-        console.error('Error al obtener inventario:', error);
+        console.error('Error inventory:', error);
         res.status(500).json({ error: 'Error al obtener el inventario' });
     }
 });
 
-// ---------------------------------------------------------------------
-// 3. EDITAR PRODUCTO (PUT /products/:id) - NUEVA FUNCIONALIDAD
-// Permite modificar datos y foto, manteniendo el ID
-// ---------------------------------------------------------------------
+// =====================================================================
+// 3. EDITAR PRODUCTO (PUT /products/:id)
+// Permite modificar datos y foto
+// =====================================================================
 router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edición de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
     const { nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url } = req.body;
 
     try {
-        // Actualizamos la tabla productos
         const result = await db.query(
             `UPDATE productos 
              SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8
@@ -112,9 +111,7 @@ router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edic
             [nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url || null, id]
         );
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: "Producto no encontrado" });
-        }
+        if (result.rowCount === 0) return res.status(404).json({ error: "Producto no encontrado" });
         
         res.json({ message: "Producto actualizado correctamente", producto: result.rows[0] });
     } catch (err) {
@@ -123,97 +120,57 @@ router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edic
     }
 });
 
-// ---------------------------------------------------------------------
+// =====================================================================
 // 4. SUMAR STOCK (POST /add-stock)
-// Adaptado para usar tu tabla 'inventario' separada
-// ---------------------------------------------------------------------
+// Ingreso de mercadería (InventoryDashboard)
+// =====================================================================
 router.post('/add-stock', authenticateToken, async (req, res) => {
     const { producto_id, cantidad } = req.body;
 
-    if (!producto_id || !cantidad) {
-        return res.status(400).json({ error: "Datos insuficientes" });
-    }
+    if (!producto_id || !cantidad) return res.status(400).json({ error: "Datos insuficientes" });
 
     try {
-        // En tu sistema, el stock está en la tabla 'inventario', no en 'productos'
-        // Primero verificamos si existe registro en inventario
+        // Verificar si existe registro en inventario
         const check = await db.query('SELECT * FROM inventario WHERE producto_id = $1', [producto_id]);
 
         let result;
         if (check.rows.length > 0) {
-            // Si existe, actualizamos
+            // Actualizar
             result = await db.query(
                 'UPDATE inventario SET cantidad = cantidad + $1 WHERE producto_id = $2 RETURNING cantidad',
                 [cantidad, producto_id]
             );
         } else {
-            // Si es un producto "huérfano" (sin registro en inventario), lo creamos
+            // Insertar si era huérfano
             result = await db.query(
                 'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2) RETURNING cantidad',
                 [producto_id, cantidad]
             );
         }
 
-        res.json({ message: "Stock actualizado correctamente", nuevo_stock: result.rows[0].cantidad });
+        res.json({ message: "Stock actualizado", nuevo_stock: result.rows[0].cantidad });
     } catch (err) {
-        console.error("Error al actualizar stock:", err);
-        res.status(500).json({ error: "Error interno del servidor" });
+        console.error("Error stock:", err);
+        res.status(500).json({ error: "Error interno" });
     }
 });
 
-// ---------------------------------------------------------------------
-// 5. SCAN-IN (Mantenemos por compatibilidad si lo usas en otro lado)
-// ---------------------------------------------------------------------
-router.post('/scan-in', authenticateToken, async (req, res) => {
-    const { codigo_barras, cantidad = 1 } = req.body;
-    const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
-
-    try {
-        const prodQuery = await db.query('SELECT id FROM productos WHERE codigo_barras = $1', [codigoLimpio]);
-        
-        if (prodQuery.rows.length === 0) {
-            return res.status(404).json({ error: 'Producto no encontrado.' });
-        }
-        const producto_id = prodQuery.rows[0].id;
-
-        const update = await db.query(
-            'UPDATE inventario SET cantidad = cantidad + $1 WHERE producto_id = $2 RETURNING cantidad',
-            [cantidad, producto_id]
-        );
-
-        if (update.rows.length > 0) {
-            return res.json({ message: 'Stock agregado.', nueva_cantidad: update.rows[0].cantidad });
-        } else {
-            await db.query('INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2)', [producto_id, cantidad]);
-            return res.json({ message: 'Stock inicializado y agregado.', nueva_cantidad: cantidad });
-        }
-    } catch (error) {
-        console.error('Error en scan-in:', error);
-        res.status(500).json({ error: 'Error interno.' });
-    }
-});
-
-// ---------------------------------------------------------------------
-// 6. SALIDA DE STOCK / VENTA (POST /scan-out)
-// Resta de la tabla inventario
-// ---------------------------------------------------------------------
-// backend/routes/inventory.js (Solo la parte de scan-out)
-
-// --- 6. REGISTRAR VENTA (Salida de Stock - POS) ---
+// =====================================================================
+// 5. REGISTRAR VENTA (POST /scan-out) - PUNTO DE VENTA
+// Permite precio modificado (descuento)
+// =====================================================================
 router.post('/scan-out', authenticateToken, async (req, res) => {
-    // 🟢 CAMBIO: Ahora recibimos 'precio_venta' desde el frontend (opcional)
+    // Recibimos 'precio_venta' opcional (si el usuario lo cambió en el POS)
     const { codigo_barras, cantidad = 1, precio_venta } = req.body;
-    
     const userId = req.user ? req.user.userId : null; 
     const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
 
     try {
         await db.query('BEGIN');
 
-        // 1. Verificar existencia y stock
-        // Traemos el precio de la BD solo como referencia o respaldo
+        // 1. Verificar stock y precio base
         const checkQuery = `
-            SELECT i.producto_id, i.cantidad, p.precio_venta as precio_base, p.nombre
+            SELECT i.producto_id, i.cantidad, p.precio_venta as precio_base, p.nombre 
             FROM inventario i
             JOIN productos p ON i.producto_id = p.id
             WHERE p.codigo_barras = $1
@@ -222,7 +179,7 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
 
         if (check.rows.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Producto no encontrado o sin stock.' });
+            return res.status(404).json({ error: 'Producto no encontrado o sin stock inicializado.' });
         }
 
         const { producto_id, cantidad: stockActual, precio_base, nombre } = check.rows[0];
@@ -232,7 +189,7 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `Stock insuficiente de ${nombre}. Disponible: ${stockActual}` });
         }
 
-        // 2. Definir el precio final: Si enviaste uno (descuento), usa ese. Si no, usa el de la BD.
+        // 2. Determinar precio final (El del POS o el Base)
         const precioFinal = precio_venta ? parseFloat(precio_venta) : parseFloat(precio_base);
 
         // 3. Restar inventario
@@ -241,11 +198,11 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
             [cantidad, producto_id]
         );
 
-        // 4. Guardar historial con el PRECIO FINAL REAL
+        // 4. Guardar historial con el precio real de venta
         if (userId) {
             const totalVenta = precioFinal * cantidad;
             await db.query(
-                'INSERT INTO historial_ventas (producto_id, cantidad, precio_unitario, total_venta, user_id) VALUES ($1, $2, $3, $4, $5)',
+                'INSERT INTO historial_ventas (producto_id, cantidad, precio_unitario, total_venta, user_id, fecha_venta) VALUES ($1, $2, $3, $4, $5, NOW())',
                 [producto_id, cantidad, precioFinal, totalVenta, userId]
             );
         }
@@ -256,22 +213,21 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Error en scan-out:', error);
-        res.status(500).json({ error: 'Error interno al procesar venta.' });
+        res.status(500).json({ error: 'Error al procesar la venta.' });
     }
 });
 
-// ---------------------------------------------------------------------
-// 7. ELIMINAR PRODUCTO (DELETE /products/:id)
-// Protegido por checkAdminRole
-// ---------------------------------------------------------------------
+// =====================================================================
+// 6. ELIMINAR PRODUCTO (DELETE /products/:id)
+// Solo Admin
+// =====================================================================
 router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('Eliminación de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
 
     try {
         await db.query('BEGIN');
-        // Primero borramos del inventario
         await db.query('DELETE FROM inventario WHERE producto_id = $1', [id]);
-        // Luego borramos el producto
+        
         const result = await db.query('DELETE FROM productos WHERE id = $1 RETURNING *', [id]);
 
         if (result.rowCount === 0) {
@@ -284,12 +240,85 @@ router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('E
 
     } catch (error) {
         await db.query('ROLLBACK');
-        console.error('Error al eliminar producto:', error);
+        console.error('Error delete:', error);
         
         if (error.code === '23503') {
             return res.status(400).json({ error: 'No se puede eliminar: El producto tiene historial de ventas.' });
         }
         res.status(500).json({ error: 'Error interno al eliminar.' });
+    }
+});
+
+// =====================================================================
+// 7. REPORTES Y CONFIGURACIÓN (NUEVAS FUNCIONES)
+// =====================================================================
+
+// A. REPORTE: Productos Estancados (Creados hace >3 meses, sin ventas en >3 meses, con stock)
+router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, res) => {
+    try {
+        const query = `
+            SELECT p.nombre, p.marca, p.fecha_creacion, COALESCE(i.cantidad, 0) as cantidad
+            FROM productos p
+            LEFT JOIN inventario i ON p.id = i.producto_id
+            WHERE p.fecha_creacion < NOW() - INTERVAL '3 months'
+            AND p.id NOT IN (
+                SELECT producto_id FROM historial_ventas WHERE fecha_venta > NOW() - INTERVAL '3 months'
+            )
+            AND i.cantidad > 0 
+            ORDER BY p.fecha_creacion ASC
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error generando reporte' });
+    }
+});
+
+// B. CONFIGURACIÓN TICKET: Obtener datos
+router.get('/config/ticket', authenticateToken, async (req, res) => {
+    try {
+        // Asumimos que existe una tabla 'configuracion'. Si no, devuelve objeto vacío
+        const result = await db.query('SELECT * FROM configuracion LIMIT 1');
+        res.json(result.rows[0] || {});
+    } catch (error) {
+        // Si falla (ej. tabla no existe aún), devolvemos vacío sin error 500 para no romper el front
+        res.json({}); 
+    }
+});
+
+// C. CONFIGURACIÓN TICKET: Guardar datos
+router.post('/config/ticket', authenticateToken, checkAdminRole, async (req, res) => {
+    const { nombre_empresa, direccion, mensaje_final, whatsapp, instagram_url, logo_url, tipo_papel } = req.body;
+    try {
+        const check = await db.query('SELECT id FROM configuracion LIMIT 1');
+        if (check.rows.length > 0) {
+            await db.query(`
+                UPDATE configuracion SET nombre_empresa=$1, direccion=$2, mensaje_final=$3, whatsapp=$4, instagram_url=$5, logo_url=$6, tipo_papel=$7`,
+                [nombre_empresa, direccion, mensaje_final, whatsapp, instagram_url, logo_url, tipo_papel]
+            );
+        } else {
+            await db.query(`
+                INSERT INTO configuracion (nombre_empresa, direccion, mensaje_final, whatsapp, instagram_url, logo_url, tipo_papel)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [nombre_empresa, direccion, mensaje_final, whatsapp, instagram_url, logo_url, tipo_papel]
+            );
+        }
+        res.json({ message: 'Configuración guardada' });
+    } catch (error) { 
+        console.error(error);
+        res.status(500).json({ error: 'Error guardando configuración. Asegúrate de haber creado la tabla configuracion en la BD.' }); 
+    }
+});
+
+// D. LIMPIEZA AUTOMÁTICA: Borrar ventas de hace más de 1 mes
+router.delete('/sales/cleanup', authenticateToken, checkAdminRole, async (req, res) => {
+    try {
+        await db.query("DELETE FROM historial_ventas WHERE fecha_venta < NOW() - INTERVAL '1 month'");
+        res.json({ message: 'Historial antiguo eliminado correctamente.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error en limpieza automática' });
     }
 });
 

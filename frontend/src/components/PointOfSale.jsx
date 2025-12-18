@@ -1,20 +1,21 @@
-// src/components/PointOfSale.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Box, Paper, Typography, TextField, Button, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    IconButton, Alert, CircularProgress, Avatar, InputAdornment
+    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import { 
+    Delete, RemoveCircleOutline, AddCircleOutline, 
+    ShoppingCart, Print 
+} from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
-import './Ticket.css';
 
-const formatCurrency = (amount) => {
-    return `Q${Number(amount).toFixed(2)}`;
-};
+// Librerías para el QR y renderizado del ticket
+import QRCode from 'react-qr-code';
+import { createRoot } from 'react-dom/client';
+
+// Función para formatear dinero
+const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
 const PointOfSale = () => {
     const [inventory, setInventory] = useState([]);
@@ -24,13 +25,15 @@ const PointOfSale = () => {
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
     
-    const userName = localStorage.getItem('userName') || 'Cajero General';
+    // Estado para guardar la última venta y permitir re-impresión
+    const [lastSaleCart, setLastSaleCart] = useState(null);
+
     const inputRef = useRef(null);
 
-    // Calculamos el total dinámicamente basado en precio modificado y cantidad
+    // Calculamos el total dinámico (Precio Modificado * Cantidad)
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-    // 1. Cargar inventario
+    // --- 1. CARGA INICIAL ---
     const loadInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -46,10 +49,16 @@ const PointOfSale = () => {
 
     useEffect(() => {
         loadInventory();
-        if(inputRef.current) inputRef.current.focus();
+        focusInput();
     }, []);
 
-    // 2. Lógica del Carrito
+    const focusInput = () => {
+        setTimeout(() => {
+            if (inputRef.current) inputRef.current.focus();
+        }, 100);
+    };
+
+    // --- 2. LÓGICA DEL CARRITO ---
 
     const addProductToCart = (code) => {
         setError(null);
@@ -68,26 +77,26 @@ const PointOfSale = () => {
         const existingItem = cart.find(item => item.id === product.id);
         
         if (existingItem) {
-            // Si ya existe, solo sumamos 1 (validando stock)
             updateQuantity(existingItem.id, existingItem.qty + 1, product.cantidad);
         } else {
-            // Si es nuevo, lo agregamos con su precio original
+            // Agregamos usando el precio original de base
             setCart([...cart, { ...product, qty: 1 }]);
         }
     };
 
-    // 🟢 NUEVA FUNCIÓN: Actualizar Cantidad (+ / -)
+    // 🟢 CAMBIAR CANTIDAD (+ / -)
     const updateQuantity = (id, newQty, maxStock) => {
-        if (newQty < 1) return; // No bajar de 1
+        if (newQty < 1) return;
         if (newQty > maxStock) {
-            setError(`Solo hay ${maxStock} unidades disponibles.`);
+            setError(`Stock insuficiente. Máx: ${maxStock}`);
             return;
         }
         setError(null);
         setCart(cart.map(item => item.id === id ? { ...item, qty: newQty } : item));
+        focusInput();
     };
 
-    // 🟢 NUEVA FUNCIÓN: Modificar Precio (Descuento manual)
+    // 🟢 CAMBIAR PRECIO (Descuentos)
     const updatePrice = (id, newPrice) => {
         setCart(cart.map(item => item.id === id ? { ...item, precio_venta: newPrice } : item));
     };
@@ -101,7 +110,7 @@ const PointOfSale = () => {
         }
     };
 
-    // 3. Cobrar
+    // --- 3. PROCESAR VENTA ---
     const handleCheckout = async () => {
         if (cart.length === 0) return;
         setLoading(true);
@@ -109,60 +118,173 @@ const PointOfSale = () => {
         try {
             const token = localStorage.getItem('authToken');
             
+            // Enviar cada ítem al backend con su precio final y cantidad
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
                     cantidad: item.qty,
-                    precio_venta: item.precio_venta // Enviamos el precio (quizás modificado)
+                    precio_venta: item.precio_venta 
                 }, { headers: { Authorization: `Bearer ${token}` } });
             }
             
-            handlePrintTicket();
-            setSuccessMsg("¡Venta registrada!");
+            // Guardamos esta venta como "última" para re-imprimir
+            const currentCart = [...cart];
+            setLastSaleCart(currentCart);
+
+            // Imprimir
+            await handlePrintTicket(currentCart);
+
+            setSuccessMsg("¡Venta registrada con éxito!");
             setCart([]); 
-            loadInventory(); // Recargar stocks
+            loadInventory(); // Recargar stock actualizado
 
         } catch (err) {
             const msg = err.response?.data?.error || "Error al procesar la venta.";
             setError(msg);
         } finally {
             setLoading(false);
-            setTimeout(() => {
-                if(inputRef.current) inputRef.current.focus();
-            }, 100);
+            focusInput();
         }
     };
 
-    // 4. Impresión
-    const handlePrintTicket = () => {
-        const ticketElement = document.getElementById('seccion-ticket');
-        if (!ticketElement) return;
-        const printWindow = window.open('', '_blank');
-        const styleTicket = `
-            <style>
-                @page { size: 80mm auto; margin: 0; }
-                body { width: 72mm; margin: 0 auto; padding: 3mm; font-family: 'Courier New', monospace; font-size: 13px; }
-                .text-center { text-align: center; }
-                .text-right { text-align: right; }
-                .divider { border-top: 1px dashed #000; margin: 6px 0; }
-                table { width: 100%; border-collapse: collapse; }
-                td { padding: 2px 0; }
-                .total-label { font-size: 16px; font-weight: bold; }
-            </style>
-        `;
-        printWindow.document.write(`<html><head><title>Ticket</title>${styleTicket}</head><body>${ticketElement.innerHTML}</body></html>`);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+    // --- 4. IMPRESIÓN PROFESIONAL (Ticket Configurable) ---
+    const handlePrintTicket = async (cartToPrint = cart) => {
+        if (!cartToPrint || cartToPrint.length === 0) return;
+
+        try {
+            const token = localStorage.getItem('authToken');
+            // Obtener configuración (Logo, Papel, Mensaje)
+            const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
+            const config = res.data || {};
+
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert("Permite ventanas emergentes para imprimir.");
+                return;
+            }
+
+            // Detectar tipo de papel
+            const tipoPapel = config.tipo_papel || '80mm';
+            const isStandard = tipoPapel === 'carta' || tipoPapel === 'oficio';
+
+            // Calcular total del carrito a imprimir
+            const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
+
+            // CSS Dinámico
+            const css = `
+                @page { 
+                    size: ${tipoPapel === 'oficio' ? 'legal' : (tipoPapel === 'carta' ? 'letter' : '80mm auto')}; 
+                    margin: ${isStandard ? '1.5cm' : '0'}; 
+                }
+                body { 
+                    width: ${isStandard ? '100%' : '72mm'}; 
+                    margin: 0 auto; 
+                    padding: ${isStandard ? '0' : '5mm'}; 
+                    font-family: 'Courier New', monospace; 
+                    font-size: ${isStandard ? '14px' : '12px'};
+                    color: #000;
+                }
+                .header { text-align: center; margin-bottom: 15px; }
+                .logo { max-width: ${isStandard ? '120px' : '60px'}; display: block; margin: 0 auto 5px auto; }
+                .title { font-size: 1.2em; font-weight: bold; margin: 5px 0; }
+                .info { font-size: 0.9em; margin: 2px 0; }
+                
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; border-bottom: 1px dashed #000; }
+                th { border-bottom: 1px dashed #000; text-align: left; padding: 5px 0; }
+                td { padding: 5px 0; vertical-align: top; }
+                
+                .totals { margin-top: 10px; text-align: right; }
+                .total-line { font-size: 1.2em; font-weight: bold; margin-top: 5px; }
+                
+                .footer { margin-top: 20px; text-align: center; font-size: 0.9em; }
+                .qr-container { display: flex; justify-content: center; margin-top: 15px; }
+            `;
+
+            const html = `
+                <html>
+                <head><title>Ticket de Venta</title><style>${css}</style></head>
+                <body>
+                    <div class="header">
+                        ${config.logo_url ? `<img src="${config.logo_url}" class="logo" />` : ''}
+                        <div class="title">${config.nombre_empresa || "Mi Tienda"}</div>
+                        <div class="info">${config.direccion || ""}</div>
+                        <div class="info">WhatsApp: ${config.whatsapp || "---"}</div>
+                        <div class="info">${new Date().toLocaleString()}</div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Desc</th>
+                                <th align="center">Cant</th>
+                                <th align="right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cartToPrint.map(item => `
+                                <tr>
+                                    <td>
+                                        ${item.nombre} <br/>
+                                        <small>${item.marca} - ${item.talla}</small>
+                                    </td>
+                                    <td align="center">${item.qty}</td>
+                                    <td align="right">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="totals">
+                        <div class="total-line">TOTAL: Q${totalPrint.toFixed(2)}</div>
+                    </div>
+
+                    <div class="footer">
+                        <p>${config.mensaje_final || "¡Gracias por su compra!"}</p>
+                        ${config.instagram_url ? '<div id="qr-code"></div>' : ''}
+                        ${config.instagram_url ? '<p style="font-size:10px">¡Síguenos en Instagram!</p>' : ''}
+                    </div>
+                </body>
+                </html>
+            `;
+
+            printWindow.document.write(html);
+            printWindow.document.close();
+
+            // Renderizar QR (React en ventana externa)
+            if (config.instagram_url) {
+                printWindow.onload = () => {
+                    const container = printWindow.document.getElementById('qr-code');
+                    if (container) {
+                        const root = createRoot(container);
+                        root.render(<QRCode value={config.instagram_url} size={isStandard ? 100 : 80} />);
+                    }
+                    // Esperar un poco a que el QR se pinte antes de imprimir
+                    setTimeout(() => {
+                        printWindow.focus();
+                        printWindow.print();
+                        printWindow.close();
+                    }, 800);
+                };
+            } else {
+                setTimeout(() => {
+                    printWindow.focus();
+                    printWindow.print();
+                    printWindow.close();
+                }, 500);
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("No se pudo generar el ticket.");
+        }
     };
 
-    // Atajos de teclado (F2 y F9)
+    // Atajos de teclado
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (document.activeElement !== inputRef.current && 
-               (document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'checkbox')) {
-                return; // Si está editando precio, no capturar F2/F9 globalmente
-            }
+            // Evitar conflictos si se está escribiendo el precio
+            if (document.activeElement.tagName === 'INPUT' && document.activeElement !== inputRef.current) return;
+
             if (event.key === 'F2') { event.preventDefault(); if (inputRef.current) inputRef.current.focus(); }
             if (event.key === 'F9') { event.preventDefault(); handleCheckout(); }
         };
@@ -170,11 +292,24 @@ const PointOfSale = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [cart]); 
 
+
+    // --- RENDERIZADO ---
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', p: 2 }}>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50', flexShrink: 0 }}>
-                🛒 Punto de Venta
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                    🛒 Punto de Venta
+                </Typography>
+                {lastSaleCart && (
+                    <Button 
+                        startIcon={<Print />} 
+                        onClick={() => handlePrintTicket(lastSaleCart)}
+                        variant="outlined" size="small"
+                    >
+                        Re-imprimir Último
+                    </Button>
+                )}
+            </Box>
 
             <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden', pb: 1 }}>
                 
@@ -187,16 +322,20 @@ const PointOfSale = () => {
                         value={barcode} onChange={(e) => setBarcode(e.target.value)} onKeyDown={handleScan}
                         sx={{ mb: 2 }}
                     />
+                    
                     {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
                     {successMsg && <Alert severity="success" sx={{ mb: 1 }}>{successMsg}</Alert>}
                     
+                    {/* Lista rápida visual */}
                     <Box sx={{ mt: 1, flexGrow: 1, overflowY: 'auto', pr: 1 }}>
                         {cart.slice().reverse().map((item, index) => (
                             <Box key={index} sx={{ p: 1, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Avatar src={item.imagen_url} variant="rounded" sx={{ width: 40, height: 40 }}>{item.nombre.charAt(0)}</Avatar>
                                 <Box sx={{ flexGrow: 1 }}>
                                     <Typography fontWeight="bold" color="green">{item.nombre}</Typography>
-                                    <Typography variant="caption">Cant: {item.qty} | Precio Final: Q{item.precio_venta}</Typography>
+                                    <Typography variant="caption">
+                                        {item.qty} x {formatCurrency(item.precio_venta)}
+                                    </Typography>
                                 </Box>
                                 <Typography fontWeight="bold">{formatCurrency(item.precio_venta * item.qty)}</Typography>
                             </Box>
@@ -205,7 +344,7 @@ const PointOfSale = () => {
                 </Paper>
 
                 {/* 🔵 COLUMNA DERECHA: Tabla Editable */}
-                <Paper elevation={3} sx={{ p: 2, width: '55%', minWidth: '500px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', overflow: 'hidden' }}>
+                <Paper elevation={3} sx={{ p: 2, width: '55%', minWidth: '550px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', overflow: 'hidden' }}>
                     <Typography variant="h6" sx={{ borderBottom: '1px solid #ccc', pb: 1, flexShrink: 0 }}>Detalle de Venta</Typography>
 
                     <TableContainer sx={{ flexGrow: 1, overflowY: 'auto' }}>
@@ -214,8 +353,8 @@ const PointOfSale = () => {
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 'bold' }}>Producto</TableCell>
                                     <TableCell align="center" sx={{ fontWeight: 'bold' }}>Cant.</TableCell>
-                                    <TableCell align="center" sx={{ fontWeight: 'bold', width: '100px' }}>Precio Unit.</TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                                    <TableCell align="center" sx={{ fontWeight: 'bold', width: '100px' }}>Precio</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Subtotal</TableCell>
                                     <TableCell></TableCell>
                                 </TableRow>
                             </TableHead>
@@ -225,24 +364,27 @@ const PointOfSale = () => {
                                         <TableCell>
                                             <Box display="flex" alignItems="center" gap={1}>
                                                 <Avatar src={item.imagen_url} sx={{ width: 30, height: 30 }} />
-                                                <Typography variant="body2">{item.nombre}</Typography>
+                                                <Box>
+                                                    <Typography variant="body2" fontWeight="bold">{item.nombre}</Typography>
+                                                    <Typography variant="caption" color="textSecondary">{item.marca} - {item.talla}</Typography>
+                                                </Box>
                                             </Box>
                                         </TableCell>
                                         
-                                        {/* 🟢 CANTIDAD CON BOTONES */}
+                                        {/* 1. CANTIDAD EDITABLE (+/-) */}
                                         <TableCell align="center">
                                             <Box display="flex" alignItems="center" justifyContent="center">
-                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty - 1, item.cantidad)}>
-                                                    <RemoveCircleOutlineIcon fontSize="small" />
+                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty - 1, item.cantidad)} color="primary">
+                                                    <RemoveCircleOutline />
                                                 </IconButton>
-                                                <Typography sx={{ mx: 1, fontWeight: 'bold' }}>{item.qty}</Typography>
-                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty + 1, item.cantidad)}>
-                                                    <AddCircleOutlineIcon fontSize="small" />
+                                                <Typography sx={{ mx: 1, fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.qty}</Typography>
+                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty + 1, item.cantidad)} color="primary">
+                                                    <AddCircleOutline />
                                                 </IconButton>
                                             </Box>
                                         </TableCell>
 
-                                        {/* 🟢 PRECIO EDITABLE */}
+                                        {/* 2. PRECIO EDITABLE (Descuentos) */}
                                         <TableCell align="center">
                                             <TextField 
                                                 type="number" 
@@ -250,10 +392,11 @@ const PointOfSale = () => {
                                                 value={item.precio_venta}
                                                 onChange={(e) => updatePrice(item.id, e.target.value)}
                                                 InputProps={{
-                                                    startAdornment: <InputAdornment position="start">Q</InputAdornment>,
+                                                    startAdornment: <InputAdornment position="start" sx={{mr:0}}><Typography variant="caption">Q</Typography></InputAdornment>,
                                                     disableUnderline: true,
-                                                    style: { fontWeight: 'bold', color: '#2e7d32', width: '80px' }
+                                                    style: { fontWeight: 'bold', color: '#2e7d32', fontSize: '14px' }
                                                 }}
+                                                sx={{ width: '70px' }}
                                             />
                                         </TableCell>
 
@@ -262,61 +405,42 @@ const PointOfSale = () => {
                                         </TableCell>
 
                                         <TableCell>
-                                            <IconButton size="small" color="error" onClick={() => removeFromCart(item.id)}>
-                                                <DeleteIcon />
-                                            </IconButton>
+                                            <Tooltip title="Quitar">
+                                                <IconButton size="small" color="error" onClick={() => removeFromCart(item.id)}>
+                                                    <Delete />
+                                                </IconButton>
+                                            </Tooltip>
                                         </TableCell>
                                     </TableRow>
                                 ))}
+                                {cart.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={5} align="center" sx={{ py: 6, color: '#aaa' }}>
+                                            <ShoppingCart sx={{ fontSize: 50, opacity: 0.3 }} />
+                                            <Typography>Carrito vacío. Escanea productos.</Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>
 
+                    {/* TOTALES */}
                     <Box sx={{ mt: 'auto', pt: 2, borderTop: '2px dashed #ccc', flexShrink: 0 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, px: 2 }}>
                             <Typography variant="h4" fontWeight="bold">TOTAL:</Typography>
                             <Typography variant="h4" fontWeight="bold" color="primary">{formatCurrency(total)}</Typography>
                         </Box>
                         <Button 
                             variant="contained" color="success" fullWidth size="large" 
                             onClick={handleCheckout} disabled={loading || cart.length === 0} 
-                            sx={{ py: 2, fontSize: '1.2rem' }}
+                            sx={{ py: 2, fontSize: '1.4rem', fontWeight: 'bold', boxShadow: 3 }}
                         >
-                            {loading ? <CircularProgress size={24} color="inherit"/> : 'COBRAR (F9)'}
+                            {loading ? <CircularProgress size={28} color="inherit"/> : 'COBRAR (F9)'}
                         </Button>
                     </Box>
                 </Paper>
             </Box>
-
-            {/* Ticket Térmico */}
-            <div id="seccion-ticket" style={{ display: 'none' }}>
-                <div className="text-center">
-                    <h2 style={{ margin: 0 }}>POTTER'S STORE</h2>
-                    <div className="divider"></div>
-                    <p>Atiende: {userName}</p>
-                    <p>{new Date().toLocaleString('es-GT')}</p>
-                </div>
-                <div className="divider"></div>
-                <table>
-                    <thead><tr><th align="left">DESC</th><th align="center">CANT</th><th align="right">SUB</th></tr></thead>
-                    <tbody>
-                        {cart.map((item) => (
-                            <tr key={item.id}>
-                                <td style={{fontSize: '11px'}}>
-                                    {item.nombre.toUpperCase().substring(0, 15)}
-                                    {/* Mostrar si hubo descuento */}
-                                    <br/><span style={{fontSize:'9px'}}>@ Q{Number(item.precio_venta).toFixed(2)}</span>
-                                </td>
-                                <td align="center">{item.qty}</td>
-                                <td align="right">Q{(item.precio_venta * item.qty).toFixed(2)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                <div className="divider"></div>
-                <div className="text-right total-label">TOTAL: {formatCurrency(total)}</div>
-                <div className="text-center" style={{ marginTop: '15px' }}><p>*** Gracias por su compra ***</p></div>
-            </div>
         </Box>
     );
 };
