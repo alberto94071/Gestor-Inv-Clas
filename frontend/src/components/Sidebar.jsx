@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
     Drawer, List, ListItem, ListItemIcon, ListItemText, 
@@ -10,10 +11,13 @@ import {
     Assessment,     // Icono para Reportes
     People,         // Icono para Usuarios
     History,        // Icono para Auditoría
-    ReceiptLong,    // 🟢 Icono para Personalizar Recibo
+    ReceiptLong,    // Icono para Personalizar Recibo
     ExitToApp       // Icono para Salir
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+
+// URL del logo proporcionada
+const LOGO_URL = "https://res.cloudinary.com/dbwlqg4tp/image/upload/v1766102350/Gemini_Generated_Image_t8z77t8z77t8z77t_wftaf0.jpg";
 
 const drawerWidth = 240;
 
@@ -30,14 +34,10 @@ const Sidebar = ({ handleLogout, user }) => {
 
     // 2. Menú de Administrador (Se agregan si el rol es admin)
     if (user?.rol === 'admin') {
-        // Separador visual en la lógica
-        
-        // --- Lo que tenías antes ---
         menuItems.push({ text: 'Reportes Financieros', icon: <Assessment />, path: '/reports' });
         menuItems.push({ text: 'Usuarios', icon: <People />, path: '/users' });
         menuItems.push({ text: 'Auditoría', icon: <History />, path: '/audit' });
-
-        // --- 🟢 Lo NUEVO (Configuración del Recibo) ---
+        // Configuración del Recibo
         menuItems.push({ text: 'Personalizar Recibo', icon: <ReceiptLong />, path: '/admin-tools' });
     }
 
@@ -55,6 +55,30 @@ const Sidebar = ({ handleLogout, user }) => {
                 },
             }}
         >
+            {/* 🟢 SECCIÓN DEL LOGO (NUEVO) */}
+            <Box 
+                sx={{ 
+                    p: 3, 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    borderBottom: '1px solid #2d3748', // Separador sutil
+                    bgcolor: '#131722' // Un tono ligeramente más oscuro para el header del logo
+                }}
+            >
+                <img 
+                    src={LOGO_URL} 
+                    alt="Logo Empresa" 
+                    style={{ 
+                        maxWidth: '100%', 
+                        height: 'auto', 
+                        maxHeight: '80px', // Altura máxima para que no sea gigante
+                        borderRadius: '12px', // Bordes redondeados suaves
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)' // Sombra para dar profundidad
+                    }} 
+                />
+            </Box>
+
             {/* SECCIÓN PERFIL DE USUARIO */}
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid #2d3748' }}>
                 <Avatar sx={{ bgcolor: '#3182ce', width: 40, height: 40 }}>
