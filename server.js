@@ -45,7 +45,7 @@ const inventoryRoutes = require('./routes/inventory');
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/reports', reportRoutes);
-app.use('/api/users', usersRoutes); // <--- AGREGAR ESTO
+app.use('/api/Users', usersRoutes); // <--- AGREGAR ESTO
 // --- Manejo de la Raíz ---
 app.get('/', (req, res) => {
     res.send('Servidor de Gestión de Inventario de Ropa (Backend activo)');
