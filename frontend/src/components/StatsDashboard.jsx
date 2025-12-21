@@ -41,7 +41,7 @@ const StatsDashboard = () => {
                 });
                 setInventory(invRes.data);
 
-                // Cargar Historial de Ventas (Para la gráfica de días)
+                // Cargar Historial de Ventas
                 try {
                     const salesRes = await API.get('/inventory/sales-history', {
                         headers: { Authorization: `Bearer ${token}` }
@@ -61,11 +61,11 @@ const StatsDashboard = () => {
         fetchData();
     }, []);
 
-    // 2. Calcular Estadísticas y Gráficas
+    // 2. Calcular Estadísticas
     const stats = useMemo(() => {
         if (!inventory.length) return { totalProducts: 0, totalValue: 0, lowStockItems: 0, chartData: [], salesData: [] };
 
-        // --- KPI: Inventario ---
+        // KPI: Inventario
         const totalProducts = inventory.length;
         const totalValue = inventory.reduce((acc, item) => {
             const precio = parseFloat(item.precio_venta) || 0;
@@ -74,7 +74,7 @@ const StatsDashboard = () => {
         }, 0);
         const lowStockItems = inventory.filter(item => (parseInt(item.cantidad) || 0) < 5).length;
         
-        // --- GRÁFICA 1: STOCK POR MARCA (Top 8) ---
+        // GRÁFICA 1: STOCK POR MARCA
         const brandMap = {};
         inventory.forEach(item => {
             const brand = item.marca ? item.marca.toUpperCase() : 'SIN MARCA';
@@ -87,28 +87,22 @@ const StatsDashboard = () => {
             stock: brandMap[key]
         })).sort((a, b) => b.stock - a.stock).slice(0, 8); 
 
-        // --- GRÁFICA 2: VENTAS POR DÍA DE LA SEMANA ---
-        // Inicializamos los días en español con 0
+        // GRÁFICA 2: VENTAS POR DÍA
         const daysMap = {
             'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0, 'Domingo': 0
         };
 
         salesHistory.forEach(sale => {
-            // Asumiendo que sale.fecha_hora es un string de fecha válido
             const date = new Date(sale.fecha_hora);
-            const dayIndex = date.getDay(); // 0 = Domingo, 1 = Lunes...
-            
-            // Mapeamos el índice al nombre en español
+            const dayIndex = date.getDay(); // 0 = Domingo
             const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
             const dayName = dayNames[dayIndex];
             
-            // Sumamos el total de la venta
             if (daysMap[dayName] !== undefined) {
                 daysMap[dayName] += parseFloat(sale.totalVenta || (sale.precio_unitario * sale.cantidad));
             }
         });
 
-        // Convertimos a array ordenado (Lunes a Domingo)
         const orderedDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const salesData = orderedDays.map(day => ({
             day: day,
@@ -149,7 +143,7 @@ const StatsDashboard = () => {
                 </Typography>
             </Box>
 
-            {/* --- KPI CARDS --- */}
+            {/* KPI CARDS */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} md={4}>
                     <Card elevation={3} sx={{ borderRadius: 4 }}>
@@ -199,9 +193,10 @@ const StatsDashboard = () => {
                 </Grid>
             </Grid>
 
+            {/* GRÁFICAS */}
             <Grid container spacing={3}>
                 
-                {/* --- GRÁFICA 1: VENTAS POR DÍA (Línea) --- */}
+                {/* VENTAS POR DÍA */}
                 <Grid item xs={12} lg={6}>
                     <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
                         <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -209,9 +204,9 @@ const StatsDashboard = () => {
                         </Typography>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🟢 CORRECCIÓN ERROR WIDTH(-1): Contenedor con altura fija */}
-                        <Box sx={{ width: '100%', height: 350 }}> 
-                            <ResponsiveContainer width="100%" height="100%">
+                        {/* 🔴 SOLUCIÓN DEFINITIVA: Usar div simple + minWidth={0} */}
+                        <div style={{ width: '100%', height: 350 }}> 
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                 <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
@@ -223,11 +218,11 @@ const StatsDashboard = () => {
                                     <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
                                 </LineChart>
                             </ResponsiveContainer>
-                        </Box>
+                        </div>
                     </Paper>
                 </Grid>
 
-                {/* --- GRÁFICA 2: STOCK POR MARCA (Barras) --- */}
+                {/* STOCK POR MARCA */}
                 <Grid item xs={12} lg={6}>
                     <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
                         <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -235,9 +230,9 @@ const StatsDashboard = () => {
                         </Typography>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🟢 CORRECCIÓN ERROR WIDTH(-1): Contenedor con altura fija */}
-                        <Box sx={{ width: '100%', height: 350 }}> 
-                            <ResponsiveContainer width="100%" height="100%">
+                        {/* 🔴 SOLUCIÓN DEFINITIVA: Usar div simple + minWidth={0} */}
+                        <div style={{ width: '100%', height: 350 }}> 
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                 <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
@@ -253,7 +248,7 @@ const StatsDashboard = () => {
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
-                        </Box>
+                        </div>
                     </Paper>
                 </Grid>
             </Grid>
