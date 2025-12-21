@@ -1,17 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import API from '../api/axiosInstance';
 import { 
     Container, Typography, CircularProgress, Alert, Paper, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
     Button, Box, Chip, TextField, IconButton, Dialog, 
     DialogTitle, DialogContent, DialogActions, DialogContentText, Avatar,
-    Tooltip, Snackbar
+    Tooltip, Snackbar, Grid, Card, CardContent
 } from '@mui/material';
 import { 
     Add, Search, Delete, Edit, Close, 
     ArrowBack, ArrowForward, ImageNotSupported,
-    ShoppingCart, Remove, AddCircle, RemoveCircle
+    ShoppingCart, Remove, AddCircle, RemoveCircle,
+    Inventory, AttachMoney, Warning
 } from '@mui/icons-material';
+
+// --- IMPORTAMOS RECHARTS PARA LA GRÁFICA ---
+// Asegúrate de tener instalado: npm install recharts
+import { 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell 
+} from 'recharts';
 
 import CreateProductModal from './CreateProductModal'; 
 
@@ -36,12 +43,12 @@ const InventoryDashboard = () => {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [productToDelete, setProductToDelete] = useState(null);
     
-    // 🟢 MODAL DE STOCK MEJORADO
+    // Stock Modal
     const [stockModalOpen, setStockModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
-    const [stockQuantity, setStockQuantity] = useState(''); // Cantidad a mover
+    const [stockQuantity, setStockQuantity] = useState(''); 
 
-    // 🟢 GALERÍA (Índice de navegación)
+    // Galería
     const [viewImageIndex, setViewImageIndex] = useState(null);
 
     // Refs
@@ -69,14 +76,36 @@ const InventoryDashboard = () => {
 
     useEffect(() => { fetchInventory(); }, []);
 
-    // Auto-focus
+    // Auto-focus inteligente
     useEffect(() => {
         if (!openCreateModal && !stockModalOpen && !confirmNewOpen && !deleteConfirmOpen && viewImageIndex === null) {
             setTimeout(() => { if (searchInputRef.current) searchInputRef.current.focus(); }, 100);
         }
     }, [openCreateModal, stockModalOpen, confirmNewOpen, deleteConfirmOpen, viewImageIndex]);
 
-    // Filtrado
+    // --- CÁLCULOS PARA DASHBOARD Y GRÁFICAS ---
+    const stats = useMemo(() => {
+        const totalProducts = inventory.length;
+        const totalValue = inventory.reduce((acc, item) => acc + (Number(item.precio_venta) * Number(item.cantidad)), 0);
+        const lowStockItems = inventory.filter(item => item.cantidad < 5).length;
+        
+        // Datos para la gráfica (Agrupar por Marca)
+        const brandMap = {};
+        inventory.forEach(item => {
+            const brand = item.marca || 'Sin Marca';
+            if (!brandMap[brand]) brandMap[brand] = 0;
+            brandMap[brand] += Number(item.cantidad);
+        });
+        
+        const chartData = Object.keys(brandMap).map(key => ({
+            name: key,
+            stock: brandMap[key]
+        })).sort((a, b) => b.stock - a.stock).slice(0, 8); // Top 8 marcas
+
+        return { totalProducts, totalValue, lowStockItems, chartData };
+    }, [inventory]);
+
+    // Filtrado de tabla
     const filteredInventory = inventory.filter((item) => {
         const term = searchTerm.toLowerCase();
         return (
@@ -104,11 +133,9 @@ const InventoryDashboard = () => {
         }
     };
 
-    // --- STOCK: INGRESAR O RETIRAR ---
+    // --- STOCK ---
     const handleStockChange = async (isAdding) => {
         if (!stockQuantity || parseInt(stockQuantity) <= 0) return;
-        
-        // Si es 'isAdding' (true) -> Cantidad positiva. Si es false -> Negativa (Resta)
         const finalQuantity = isAdding ? parseInt(stockQuantity) : -parseInt(stockQuantity);
 
         try {
@@ -126,47 +153,36 @@ const InventoryDashboard = () => {
         }
     };
 
-    // --- AGREGAR AL CARRITO (F3) ---
+    // --- CARRITO (F3) ---
     const handleAddToCart = () => {
         if (viewImageIndex === null) return;
         const product = filteredInventory[viewImageIndex];
         if (!product) return;
 
-        // Leemos el carrito actual del localStorage (si existe)
         const storedCart = localStorage.getItem('pos_cart_temp');
         let currentCart = storedCart ? JSON.parse(storedCart) : [];
 
-        // Verificar si ya está
         const existingItem = currentCart.find(item => item.id === product.id);
         if (existingItem) {
-            // Si ya existe, no sumamos cantidad aquí para no complicar, solo avisamos
             setToast({ open: true, msg: 'El producto ya está en el carrito POS', severity: 'info' });
         } else {
-            // Agregamos con cantidad 1
             currentCart.push({ ...product, qty: 1 });
             localStorage.setItem('pos_cart_temp', JSON.stringify(currentCart));
             setToast({ open: true, msg: '¡Agregado al Carrito! (Ve al Punto de Venta)', severity: 'success' });
         }
     };
 
-    // --- NAVEGACIÓN GALERÍA ---
+    // --- GALERÍA ---
     const handleNextImage = () => viewImageIndex < filteredInventory.length - 1 && setViewImageIndex(viewImageIndex + 1);
     const handlePrevImage = () => viewImageIndex > 0 && setViewImageIndex(viewImageIndex - 1);
 
-    // Teclas en Galería (Flechas y F3)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (viewImageIndex === null) return; 
-
             if (e.key === 'ArrowRight') handleNextImage();
             if (e.key === 'ArrowLeft') handlePrevImage();
             if (e.key === 'Escape') setViewImageIndex(null);
-            
-            // 🟢 F3 para Vender
-            if (e.key === 'F3') {
-                e.preventDefault();
-                handleAddToCart();
-            }
+            if (e.key === 'F3') { e.preventDefault(); handleAddToCart(); }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -174,7 +190,7 @@ const InventoryDashboard = () => {
 
     const currentGalleryProduct = viewImageIndex !== null ? filteredInventory[viewImageIndex] : null;
 
-    // --- RESTO DE MANEJADORES ---
+    // --- MANEJADORES ---
     const handleOpenCreate = () => { setModalData(null); setOpenCreateModal(true); };
     const handleOpenEdit = (product) => { setModalData(product); setOpenCreateModal(true); };
     const handleCreateFromScan = () => { setModalData({ codigo_barras: scannedCode }); setConfirmNewOpen(false); setOpenCreateModal(true); };
@@ -198,12 +214,71 @@ const InventoryDashboard = () => {
             {/* ENCABEZADO */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                    📦 Inventario
+                    📦 Dashboard de Inventario
                 </Typography>
                 <Button variant="contained" startIcon={<Add />} onClick={handleOpenCreate} sx={{ borderRadius: 2, px: 3 }}>
                     Nuevo Producto
                 </Button>
             </Box>
+
+            {/* --- SECCIÓN DE ESTADÍSTICAS Y GRÁFICAS (NUEVO) --- */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                {/* TARJETAS KPI */}
+                <Grid item xs={12} md={4}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Card elevation={2}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Avatar sx={{ bgcolor: 'primary.main' }}><Inventory /></Avatar>
+                                <Box>
+                                    <Typography variant="h6">{stats.totalProducts}</Typography>
+                                    <Typography variant="body2" color="text.secondary">Total Productos</Typography>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                        <Card elevation={2}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Avatar sx={{ bgcolor: 'success.main' }}><AttachMoney /></Avatar>
+                                <Box>
+                                    <Typography variant="h6">Q{stats.totalValue.toFixed(2)}</Typography>
+                                    <Typography variant="body2" color="text.secondary">Valor Inventario (Est.)</Typography>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                        <Card elevation={2}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Avatar sx={{ bgcolor: 'warning.main' }}><Warning /></Avatar>
+                                <Box>
+                                    <Typography variant="h6">{stats.lowStockItems}</Typography>
+                                    <Typography variant="body2" color="text.secondary">Stock Bajo (&lt;5)</Typography>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Box>
+                </Grid>
+
+                {/* GRÁFICA DE BARRAS (STOCK POR MARCA) */}
+                <Grid item xs={12} md={8}>
+                    <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
+                        <Typography variant="h6" gutterBottom>Stock por Marca (Top 8)</Typography>
+                        {/* 🟢 LA CORRECCIÓN DEL ERROR ESTÁ AQUÍ: height fijo en el padre */}
+                        <Box sx={{ width: '100%', height: 250 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis />
+                                    <RechartsTooltip />
+                                    <Bar dataKey="stock" fill="#8884d8">
+                                        {stats.chartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Paper>
+                </Grid>
+            </Grid>
 
             {/* BUSCADOR */}
             <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', border: '1px solid #ddd' }}>
@@ -216,7 +291,7 @@ const InventoryDashboard = () => {
                 />
             </Paper>
 
-            {/* TABLA */}
+            {/* TABLA DE PRODUCTOS */}
             <TableContainer component={Paper} sx={{ borderRadius: 3, maxHeight: '65vh' }}>
                 <Table stickyHeader>
                     <TableHead>
@@ -234,15 +309,11 @@ const InventoryDashboard = () => {
                         {filteredInventory.map((product, index) => (
                             <TableRow key={product.id} hover>
                                 <TableCell>
-                                    <Tooltip title="Ver detalle (Zoom)">
+                                    <Tooltip title="Ver detalle">
                                         <Avatar 
-                                            src={product.imagen_url} 
-                                            variant="rounded" 
+                                            src={product.imagen_url} variant="rounded" 
                                             onClick={() => setViewImageIndex(index)}
-                                            sx={{ 
-                                                width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd', cursor: 'pointer',
-                                                transition: 'transform 0.2s', '&:hover': { transform: 'scale(1.1)' }
-                                            }}
+                                            sx={{ width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd', cursor: 'pointer', '&:hover': { transform: 'scale(1.1)' } }}
                                         >
                                             {product.nombre.charAt(0)}
                                         </Avatar>
@@ -272,7 +343,8 @@ const InventoryDashboard = () => {
                 </Table>
             </TableContainer>
 
-            {/* --- MODAL 1: REGISTRAR NUEVO --- */}
+            {/* MODALES (Stock, Crear, Eliminar, Galería) */}
+            {/* Modal de Producto No Encontrado */}
             <Dialog open={confirmNewOpen} onClose={() => setConfirmNewOpen(false)}>
                 <DialogTitle>Producto no encontrado</DialogTitle>
                 <DialogContent><DialogContentText>Código <strong>{scannedCode}</strong> no existe. ¿Registrar?</DialogContentText></DialogContent>
@@ -282,58 +354,33 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* --- MODAL 2: GESTIÓN DE STOCK (MEJORADO + y -) --- */}
+            {/* Modal de Stock */}
             <Dialog open={stockModalOpen} onClose={() => setStockModalOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle sx={{ textAlign: 'center', fontWeight: 'bold' }}>Ajuste de Inventario</DialogTitle>
                 <DialogContent>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, mt: 1 }}>
                         <Typography variant="h6">{selectedProduct?.nombre}</Typography>
-                        <Typography variant="body2" color="textSecondary">
-                            Stock Actual: <strong>{selectedProduct?.cantidad}</strong>
-                        </Typography>
-                        
-                        {/* Controles + y - */}
+                        <Typography variant="body2" color="textSecondary">Stock Actual: <strong>{selectedProduct?.cantidad}</strong></Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <IconButton onClick={() => setStockQuantity(prev => Math.max(0, (parseInt(prev)||0) - 1).toString())} color="error">
-                                <RemoveCircle fontSize="large" />
-                            </IconButton>
-                            
+                            <IconButton onClick={() => setStockQuantity(prev => Math.max(0, (parseInt(prev)||0) - 1).toString())} color="error"><RemoveCircle fontSize="large" /></IconButton>
                             <TextField
-                                autoFocus 
-                                type="number" 
-                                placeholder="0"
-                                value={stockQuantity} 
+                                autoFocus type="number" placeholder="0" value={stockQuantity} 
                                 onChange={(e) => setStockQuantity(e.target.value)}
                                 inputProps={{ style: { textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold' } }}
                                 sx={{ width: '100px' }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleStockChange(true); }} // Enter por defecto suma
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleStockChange(true); }}
                             />
-                            
-                            <IconButton onClick={() => setStockQuantity(prev => ((parseInt(prev)||0) + 1).toString())} color="success">
-                                <AddCircle fontSize="large" />
-                            </IconButton>
+                            <IconButton onClick={() => setStockQuantity(prev => ((parseInt(prev)||0) + 1).toString())} color="success"><AddCircle fontSize="large" /></IconButton>
                         </Box>
                     </Box>
                 </DialogContent>
                 <DialogActions sx={{ justifyContent: 'center', pb: 3, gap: 2 }}>
-                    <Button 
-                        onClick={() => handleStockChange(false)} // False = Restar
-                        variant="outlined" color="error" 
-                        startIcon={<Remove />}
-                    >
-                        Retirar
-                    </Button>
-                    <Button 
-                        onClick={() => handleStockChange(true)} // True = Sumar
-                        variant="contained" color="success" 
-                        startIcon={<Add />}
-                    >
-                        Ingresar
-                    </Button>
+                    <Button onClick={() => handleStockChange(false)} variant="outlined" color="error" startIcon={<Remove />}>Retirar</Button>
+                    <Button onClick={() => handleStockChange(true)} variant="contained" color="success" startIcon={<Add />}>Ingresar</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* --- MODAL 3: ELIMINAR --- */}
+            {/* Modal Eliminar */}
             <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
                 <DialogTitle>¿Eliminar Producto?</DialogTitle>
                 <DialogContent><DialogContentText>Se borrará permanentemente: <strong>{productToDelete?.nombre}</strong></DialogContentText></DialogContent>
@@ -343,135 +390,47 @@ const InventoryDashboard = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* --- MODAL 4: GALERÍA MEJORADA (Sin Scrollbar) --- */}
+            {/* Galería */}
             <Dialog 
-                open={viewImageIndex !== null} 
-                onClose={() => setViewImageIndex(null)} 
-                maxWidth="lg"
-                PaperProps={{ 
-                    style: { 
-                        backgroundColor: 'transparent', 
-                        boxShadow: 'none', 
-                        overflow: 'visible' // Permitir botones flotantes si fuera necesario, pero los pondremos dentro
-                    } 
-                }}
+                open={viewImageIndex !== null} onClose={() => setViewImageIndex(null)} maxWidth="lg"
+                PaperProps={{ style: { backgroundColor: 'transparent', boxShadow: 'none', overflow: 'visible' } }}
             >
-                <Box 
-                    sx={{
-                        position: 'relative', 
-                        width: 'auto',
-                        maxWidth: '90vw', // Limita el ancho al 90% de la pantalla
-                        maxHeight: '90vh',
-                        bgcolor: 'white', 
-                        borderRadius: 3,
-                        display: 'flex', flexDirection: 'column', 
-                        overflow: 'hidden', // 🟢 CLAVE: Oculta scrollbars
-                        boxShadow: 24
-                    }}
-                >
-                    {/* Botón CERRAR */}
-                    <IconButton 
-                        onClick={() => setViewImageIndex(null)}
-                        sx={{ position: 'absolute', top: 10, right: 10, zIndex: 50, bgcolor: 'rgba(0,0,0,0.1)', '&:hover':{bgcolor:'rgba(0,0,0,0.2)'} }}
-                    >
-                        <Close />
-                    </IconButton>
-
+                <Box sx={{ position: 'relative', width: 'auto', maxWidth: '90vw', maxHeight: '90vh', bgcolor: 'white', borderRadius: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 24 }}>
+                    <IconButton onClick={() => setViewImageIndex(null)} sx={{ position: 'absolute', top: 10, right: 10, zIndex: 50, bgcolor: 'rgba(0,0,0,0.1)' }}><Close /></IconButton>
                     {currentGalleryProduct && (
                         <>
-                            {/* IMAGEN */}
-                            <Box sx={{ 
-                                width: '100%', minWidth: {xs: '300px', md: '500px'}, height: '60vh', 
-                                display: 'flex', justifyContent: 'center', alignItems: 'center', 
-                                bgcolor: '#f8f9fa', position: 'relative' 
-                            }}>
-                                {/* Flecha Izquierda (FLOTANTE DENTRO) */}
-                                <IconButton 
-                                    onClick={handlePrevImage} disabled={viewImageIndex === 0}
-                                    sx={{ 
-                                        position: 'absolute', left: 10, 
-                                        bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'},
-                                        display: viewImageIndex === 0 ? 'none' : 'flex'
-                                    }}
-                                >
-                                    <ArrowBack />
-                                </IconButton>
-
-                                {/* Foto */}
+                            <Box sx={{ width: '100%', minWidth: {xs: '300px', md: '500px'}, height: '60vh', display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f8f9fa', position: 'relative' }}>
+                                <IconButton onClick={handlePrevImage} disabled={viewImageIndex === 0} sx={{ position: 'absolute', left: 10, bgcolor: 'rgba(255,255,255,0.7)', display: viewImageIndex === 0 ? 'none' : 'flex' }}><ArrowBack /></IconButton>
                                 {currentGalleryProduct.imagen_url ? (
-                                    <img 
-                                        src={currentGalleryProduct.imagen_url} 
-                                        alt="Detalle" 
-                                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
-                                    />
+                                    <img src={currentGalleryProduct.imagen_url} alt="Detalle" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                                 ) : (
-                                    <Box display="flex" flexDirection="column" alignItems="center" color="text.secondary">
-                                        <ImageNotSupported sx={{ fontSize: 80, opacity: 0.3 }} />
-                                        <Typography variant="caption">Sin Imagen</Typography>
-                                    </Box>
+                                    <Box display="flex" flexDirection="column" alignItems="center" color="text.secondary"><ImageNotSupported sx={{ fontSize: 80, opacity: 0.3 }} /><Typography variant="caption">Sin Imagen</Typography></Box>
                                 )}
-
-                                {/* Flecha Derecha (FLOTANTE DENTRO) */}
-                                <IconButton 
-                                    onClick={handleNextImage} disabled={viewImageIndex === filteredInventory.length - 1}
-                                    sx={{ 
-                                        position: 'absolute', right: 10, 
-                                        bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'},
-                                        display: viewImageIndex === filteredInventory.length - 1 ? 'none' : 'flex'
-                                    }}
-                                >
-                                    <ArrowForward />
-                                </IconButton>
+                                <IconButton onClick={handleNextImage} disabled={viewImageIndex === filteredInventory.length - 1} sx={{ position: 'absolute', right: 10, bgcolor: 'rgba(255,255,255,0.7)', display: viewImageIndex === filteredInventory.length - 1 ? 'none' : 'flex' }}><ArrowForward /></IconButton>
                             </Box>
-                            
-                            {/* INFO + BOTÓN VENDER (F3) */}
                             <Box sx={{ p: 3, textAlign: 'center', borderTop: '1px solid #eee' }}>
                                 <Typography variant="h5" fontWeight="bold">{currentGalleryProduct.nombre}</Typography>
-                                <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 2 }}>
-                                    {currentGalleryProduct.marca} - {currentGalleryProduct.codigo_barras}
-                                </Typography>
-                                
+                                <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 2 }}>{currentGalleryProduct.marca} - {currentGalleryProduct.codigo_barras}</Typography>
                                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
                                     <Chip label={`Stock: ${currentGalleryProduct.cantidad}`} color={currentGalleryProduct.cantidad > 0 ? "success" : "error"} />
                                     <Chip label={`Precio: Q${Number(currentGalleryProduct.precio_venta).toFixed(2)}`} variant="outlined" />
                                 </Box>
-
-                                {/* 🟢 BOTÓN AGREGAR AL CARRITO (F3) */}
-                                <Button 
-                                    variant="contained" 
-                                    color="secondary" 
-                                    size="large"
-                                    startIcon={<ShoppingCart />}
-                                    onClick={handleAddToCart}
-                                    sx={{ px: 4, py: 1, borderRadius: 5, fontWeight: 'bold' }}
-                                >
-                                    Agregar al Carrito (F3)
-                                </Button>
+                                <Button variant="contained" color="secondary" size="large" startIcon={<ShoppingCart />} onClick={handleAddToCart} sx={{ px: 4, py: 1, borderRadius: 5, fontWeight: 'bold' }}>Agregar al Carrito (F3)</Button>
                             </Box>
                         </>
                     )}
                 </Box>
             </Dialog>
 
-            {/* Create Modal */}
+            {/* Modal Crear */}
             <CreateProductModal 
-                open={openCreateModal} 
-                handleClose={() => setOpenCreateModal(false)} 
-                fetchInventory={fetchInventory}
-                getToken={() => localStorage.getItem('authToken')}
-                initialData={modalData || (scannedCode ? { codigo_barras: scannedCode } : null)} 
+                open={openCreateModal} handleClose={() => setOpenCreateModal(false)} fetchInventory={fetchInventory}
+                getToken={() => localStorage.getItem('authToken')} initialData={modalData || (scannedCode ? { codigo_barras: scannedCode } : null)} 
             />
             
-            {/* Mensajes Flotantes (Toasts) */}
-            <Snackbar 
-                open={toast.open} 
-                autoHideDuration={3000} 
-                onClose={() => setToast({...toast, open: false})}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setToast({...toast, open: false})} severity={toast.severity} sx={{ width: '100%' }}>
-                    {toast.msg}
-                </Alert>
+            {/* Toasts */}
+            <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast({...toast, open: false})} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+                <Alert onClose={() => setToast({...toast, open: false})} severity={toast.severity} sx={{ width: '100%' }}>{toast.msg}</Alert>
             </Snackbar>
         </Container>
     );
