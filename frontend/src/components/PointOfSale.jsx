@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { 
     Delete, RemoveCircleOutline, AddCircleOutline, 
-    ShoppingCart, Print, RemoveShoppingCart // Icono para cancelar
+    ShoppingCart, Print, RemoveShoppingCart 
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
@@ -195,7 +195,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 5. IMPRESIÓN (DISEÑO PDF) ---
+    // --- 5. IMPRESIÓN (LÓGICA DUAL: CARTA vs 80MM) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -204,73 +204,193 @@ const PointOfSale = () => {
             const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
             const config = res.data || {};
 
+            // DETECTAR TIPO DE PAPEL
+            // Verifica que tu base de datos devuelva 'carta' en el campo tipo_papel
+            const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
+
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
+            // ================= ESTILOS CARTA =================
+            const estilosCarta = `
+                @page { size: letter portrait; margin: 1.5cm; }
+                body { font-family: 'Times New Roman', Times, serif; color: #333; margin: 0; padding: 0; }
+                .header-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+                .logo-img { max-width: 150px; max-height: 100px; }
+                .titulo-factura { text-align: right; }
+                .titulo-factura h1 { font-size: 36px; margin: 0; letter-spacing: 2px; }
+                .info-grid { display: flex; justify-content: space-between; margin-bottom: 30px; }
+                .columna-info { width: 45%; }
+                .columna-info h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; }
+                .columna-info p { margin: 2px 0; font-size: 14px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-family: sans-serif; }
+                th { background-color: #f0f0f0; padding: 10px; text-align: left; border-bottom: 2px solid #000; font-size: 12px; text-transform: uppercase; }
+                td { padding: 10px; border-bottom: 1px solid #ddd; font-size: 13px; }
+                .text-right { text-align: right; }
+                .text-center { text-align: center; }
+                .footer-container { margin-top: 50px; border-top: 1px solid #000; padding-top: 20px; display: flex; justify-content: space-between; }
+                .banco-info { font-size: 12px; color: #555; }
+                .firma-box { text-align: right; }
+                .firma-linea { margin-top: 40px; border-top: 1px solid #000; width: 200px; display: inline-block; }
+                .redes-sociales { margin-top: 20px; font-weight: bold; font-size: 13px; }
+                .qr-container { text-align: center; margin-top: 20px; }
+            `;
+
+            // ================= HTML CARTA =================
+            const contenidoCarta = `
+                <div class="header-container">
+                    <div>
+                        ${config.logo_url ? `<img src="${config.logo_url}" class="logo-img" />` : `<h1>${config.nombre_empresa}</h1>`}
+                    </div>
+                    <div class="titulo-factura">
+                        <h1>FACTURA</h1>
+                        <p><strong>Nº Orden:</strong> #${ticketId}</p>
+                        <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-GT')}</p>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="columna-info">
+                        <h3>Emisor</h3>
+                        <p><strong>${config.nombre_empresa || "POTTER'S STORE"}</strong></p>
+                        <p>${config.direccion || "Dirección de la empresa"}</p>
+                        <p>Tel/WhatsApp: ${config.whatsapp || ""}</p>
+                    </div>
+                    <div class="columna-info">
+                        <h3>Cliente</h3>
+                        <p><strong>Consumidor Final</strong></p>
+                        <p>Ciudad</p>
+                        <p>NIT: C/F</p>
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50%">Descripción</th>
+                            <th class="text-center" style="width: 10%">Cant.</th>
+                            <th class="text-right" style="width: 20%">Precio Unit.</th>
+                            <th class="text-right" style="width: 20%">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cartToPrint.map(item => `
+                            <tr>
+                                <td>
+                                    <strong>${item.nombre}</strong>
+                                    <br/><span style="font-size:11px; color:#666;">${item.marca || ''} ${item.talla || ''}</span>
+                                </td>
+                                <td class="text-center">${item.qty}</td>
+                                <td class="text-right">Q${Number(item.precio_venta).toFixed(2)}</td>
+                                <td class="text-right"><strong>Q${(item.precio_venta * item.qty).toFixed(2)}</strong></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="text-right" style="padding-top: 20px; font-size: 16px;"><strong>TOTAL A PAGAR:</strong></td>
+                            <td class="text-right" style="padding-top: 20px; font-size: 16px;"><strong>Q${totalPrint.toFixed(2)}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <div class="footer-container">
+                    <div class="banco-info">
+                        <strong>INFORMACIÓN DE PAGO</strong><br/>
+                        Banco Industrial<br/>
+                        A nombre de: ${config.nombre_empresa}<br/>
+                        No. Cuenta: 123-456-7890 (Monetaria)
+                    </div>
+                    <div class="firma-box">
+                        <div class="firma-linea"></div>
+                        <p>Firma / Sello</p>
+                        <div class="redes-sociales">
+                             📷 Instagram: @${config.nombre_empresa || 'potters_store'}<br/>
+                             📘 Facebook: Potter's Store
+                        </div>
+                    </div>
+                </div>
+                <div class="center" style="margin-top: 30px; font-style: italic; text-align: center;">
+                    ¡Muchas gracias por su compra!
+                </div>
+                 ${config.instagram_url ? '<div class="qr-container"><div id="qr-code"></div></div>' : ''}
+            `;
+
+            // ================= ESTILOS 80MM (Térmico) =================
+            const estilos80mm = `
+                @page { size: 80mm auto; margin: 0; }
+                body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
+                .center { text-align: center; } .bold { font-weight: bold; }
+                .dashed-top { border-top: 1px dashed #000; } .dashed-bottom { border-bottom: 1px dashed #000; }
+                .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
+                th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
+                td { vertical-align: top; font-size: 11px; padding: 4px 0; }
+                .footer { margin-top: 15px; font-size: 10px; text-align: center; }
+                .qr-box { display: flex; justify-content: center; margin-top: 10px; }
+            `;
+
+            // ================= HTML 80MM (Térmico) =================
+            const contenido80mm = `
+                <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
+                <div class="center">Comprobante de Compra</div>
+                <div class="center">Ticket ID: ${ticketId}</div>
+                <br/>
+                <div class="info-row"><span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span></div>
+                <div class="info-row"><span>Hora: ${new Date().toLocaleTimeString('es-GT')}</span></div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 45%;">DESCRIPCIÓN</th>
+                            <th style="width: 15%; text-align: center;">CANT.</th>
+                            <th style="width: 20%; text-align: right;">P.UNIT</th>
+                            <th style="width: 20%; text-align: right;">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cartToPrint.map(item => `
+                            <tr>
+                                <td>${item.nombre.toUpperCase()}</td>
+                                <td style="text-align: center;">${item.qty}</td>
+                                <td style="text-align: right;">Q${Number(item.precio_venta).toFixed(2)}</td>
+                                <td style="text-align: right;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+
+                <div class="dashed-top"></div>
+                <div style="margin-top: 5px;">
+                    <div class="info-row bold" style="font-size: 13px;">
+                        <span>TOTAL:</span>
+                        <span>Q${totalPrint.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="dashed-bottom" style="margin-top: 5px;"></div>
+
+                <div class="footer">
+                    ${config.mensaje_final || "¡Gracias por su compra!"}<br/>
+                    ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
+                    ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}<br/>
+                    ${config.instagram_url ? `IG: @${config.nombre_empresa}` : ''}
+                    ${config.instagram_url ? '<div class="qr-box"><div id="qr-code"></div></div>' : ''}
+                </div>
+            `;
+
+            // ================= INYECCIÓN FINAL =================
             const html = `
                 <html>
                 <head>
                     <title>Ticket ${ticketId}</title>
                     <style>
-                        @page { size: 80mm auto; margin: 0; }
-                        body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
-                        .center { text-align: center; } .bold { font-weight: bold; }
-                        .dashed-top { border-top: 1px dashed #000; } .dashed-bottom { border-bottom: 1px dashed #000; }
-                        .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
-                        th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
-                        td { vertical-align: top; font-size: 11px; padding: 4px 0; }
-                        .footer { margin-top: 15px; font-size: 10px; text-align: center; }
-                        .qr-box { display: flex; justify-content: center; margin-top: 10px; }
+                        ${esCarta ? estilosCarta : estilos80mm}
                     </style>
                 </head>
                 <body>
-                    <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
-                    <div class="center">Comprobante de Compra</div>
-                    <div class="center">Ticket ID: ${ticketId}</div>
-                    <br/>
-                    <div class="info-row"><span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span></div>
-                    <div class="info-row"><span>Hora: ${new Date().toLocaleTimeString('es-GT')}</span></div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width: 45%;">DESCRIPCIÓN</th>
-                                <th style="width: 15%; text-align: center;">CANT.</th>
-                                <th style="width: 20%; text-align: right;">P.UNIT</th>
-                                <th style="width: 20%; text-align: right;">TOTAL</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${cartToPrint.map(item => `
-                                <tr>
-                                    <td>${item.nombre.toUpperCase()}</td>
-                                    <td style="text-align: center;">${item.qty}</td>
-                                    <td style="text-align: right;">Q${Number(item.precio_venta).toFixed(2)}</td>
-                                    <td style="text-align: right;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-
-                    <div class="dashed-top"></div>
-                    <div style="margin-top: 5px;">
-                        <div class="info-row bold" style="font-size: 13px;">
-                            <span>TOTAL:</span>
-                            <span>Q${totalPrint.toFixed(2)}</span>
-                        </div>
-                    </div>
-                    <div class="dashed-bottom" style="margin-top: 5px;"></div>
-
-                    <div class="footer">
-                        ${config.mensaje_final || "¡Gracias por su compra!"}<br/>
-                        ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
-                        ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}<br/>
-                        ${config.instagram_url ? `IG: @${config.nombre_empresa}` : ''}
-                        ${config.instagram_url ? '<div class="qr-box"><div id="qr-code"></div></div>' : ''}
-                    </div>
+                    ${esCarta ? contenidoCarta : contenido80mm}
                 </body>
                 </html>
             `;
@@ -278,12 +398,13 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
+            // Renderizado del QR (si aplica)
             if (config.instagram_url) {
                 printWindow.onload = () => {
                     const container = printWindow.document.getElementById('qr-code');
                     if (container) {
                         const root = createRoot(container);
-                        root.render(<QRCode value={config.instagram_url} size={80} />);
+                        root.render(<QRCode value={config.instagram_url} size={esCarta ? 100 : 80} />);
                     }
                     setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
                 };
