@@ -12,7 +12,8 @@ import {
     People,         // Icono para Usuarios
     History,        // Icono para Auditoría
     ReceiptLong,    // Icono para Personalizar Recibo
-    ExitToApp       // Icono para Salir
+    ExitToApp,       // Icono para Salir
+    Handyman
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -38,7 +39,7 @@ const Sidebar = ({ handleLogout, user }) => {
         menuItems.push({ text: 'Usuarios', icon: <People />, path: '/users' });
         menuItems.push({ text: 'Auditoría', icon: <History />, path: '/audit' });
         // Configuración del Recibo
-        menuItems.push({ text: 'Personalizar Recibo', icon: <ReceiptLong />, path: '/admin-tools' });
+        menuItems.push({ text: 'Herramientas de Administrador', icon: <Handyman />, path: '/admin-tools' });
     }
 
     return (
