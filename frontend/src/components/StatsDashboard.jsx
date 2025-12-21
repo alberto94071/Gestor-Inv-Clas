@@ -5,7 +5,7 @@ import {
     Box, Avatar, Paper, Divider 
 } from '@mui/material';
 import { 
-    Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon 
+    Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon, Lock 
 } from '@mui/icons-material';
 
 // --- IMPORTAMOS RECHARTS (Librería de Gráficas) ---
@@ -17,12 +17,21 @@ const StatsDashboard = () => {
     const [inventory, setInventory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [userRole, setUserRole] = useState(''); // 🔒 ESTADO PARA EL ROL
 
-    // 1. Cargar datos del inventario
+    // 1. Cargar datos del inventario y el Rol del usuario
     useEffect(() => {
-        const fetchInventory = async () => {
+        const fetchData = async () => {
             try {
                 const token = localStorage.getItem('authToken');
+                
+                // 🟢 OBTENER ROL DEL USUARIO
+                const userStr = localStorage.getItem('user');
+                if (userStr) {
+                    const userData = JSON.parse(userStr);
+                    setUserRole(userData.rol || ''); // Guardamos el rol (ej: 'admin' o 'cajero')
+                }
+
                 const response = await API.get('/inventory/inventory', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -34,37 +43,34 @@ const StatsDashboard = () => {
                 setLoading(false);
             }
         };
-        fetchInventory();
+        fetchData();
     }, []);
 
-    // 2. Calcular Estadísticas (KPIs) en Tiempo Real
+    // 2. Calcular Estadísticas (KPIs)
     const stats = useMemo(() => {
         if (!inventory.length) return { totalProducts: 0, totalValue: 0, lowStockItems: 0, chartData: [] };
 
         const totalProducts = inventory.length;
         
-        // Calcula valor total del inventario (Precio Venta * Cantidad)
-        // Aseguramos que los valores sean números para evitar errores
+        // Valor total del inventario
         const totalValue = inventory.reduce((acc, item) => {
             const precio = parseFloat(item.precio_venta) || 0;
             const cantidad = parseInt(item.cantidad) || 0;
             return acc + (precio * cantidad);
         }, 0);
 
-        // Productos con menos de 5 unidades (Alerta de Stock)
+        // Alertas de Stock
         const lowStockItems = inventory.filter(item => (parseInt(item.cantidad) || 0) < 5).length;
         
-        // --- DATOS PARA LA GRÁFICA (Agrupado por Marca) ---
+        // Datos para gráfica
         const brandMap = {};
         inventory.forEach(item => {
             const brand = item.marca ? item.marca.toUpperCase() : 'SIN MARCA';
             const qty = parseInt(item.cantidad) || 0;
-            
             if (!brandMap[brand]) brandMap[brand] = 0;
             brandMap[brand] += qty;
         });
         
-        // Convertimos a array, ordenamos por mayor stock y tomamos el Top 8
         const chartData = Object.keys(brandMap).map(key => ({
             name: key,
             stock: brandMap[key]
@@ -73,7 +79,7 @@ const StatsDashboard = () => {
         return { totalProducts, totalValue, lowStockItems, chartData };
     }, [inventory]);
 
-    // Helper para formato de moneda (Quetzales)
+    // Helper moneda
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat('es-GT', {
             style: 'currency',
@@ -121,18 +127,29 @@ const StatsDashboard = () => {
                     </Card>
                 </Grid>
 
-                {/* Valor del Inventario (en Quetzales) */}
+                {/* Valor del Inventario (🔒 PROTEGIDO POR ROL) */}
                 <Grid item xs={12} md={4}>
                     <Card elevation={3} sx={{ borderRadius: 4, transition: '0.3s', '&:hover': { transform: 'translateY(-5px)', boxShadow: 6 } }}>
                         <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
-                            <Avatar sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', width: 60, height: 60 }}>
-                                <AttachMoney fontSize="large" />
+                            <Avatar sx={{ bgcolor: userRole === 'admin' ? '#e8f5e9' : '#eceff1', color: userRole === 'admin' ? '#2e7d32' : '#90a4ae', width: 60, height: 60 }}>
+                                {userRole === 'admin' ? <AttachMoney fontSize="large" /> : <Lock fontSize="large" />}
                             </Avatar>
                             <Box>
-                                <Typography variant="h4" fontWeight="bold" sx={{ color: '#2e7d32' }}>
-                                    {formatCurrency(stats.totalValue)}
-                                </Typography>
-                                <Typography variant="subtitle1" color="text.secondary">Valor Total Inventario</Typography>
+                                {userRole === 'admin' ? (
+                                    <>
+                                        <Typography variant="h4" fontWeight="bold" sx={{ color: '#2e7d32' }}>
+                                            {formatCurrency(stats.totalValue)}
+                                        </Typography>
+                                        <Typography variant="subtitle1" color="text.secondary">Valor Total Inventario</Typography>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Typography variant="h4" fontWeight="bold" sx={{ color: '#b0bec5' }}>
+                                            ----
+                                        </Typography>
+                                        <Typography variant="subtitle1" color="text.secondary">Información Reservada</Typography>
+                                    </>
+                                )}
                             </Box>
                         </CardContent>
                     </Card>
@@ -168,7 +185,6 @@ const StatsDashboard = () => {
                         </Box>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🟢 SOLUCIÓN AL ERROR DE CONSOLA: Contenedor con altura fija */}
                         <Box sx={{ width: '100%', height: 350 }}> 
                             {stats.chartData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
@@ -207,7 +223,7 @@ const StatsDashboard = () => {
                     </Paper>
                 </Grid>
 
-                {/* TIPS / ACCIONES RÁPIDAS */}
+                {/* TIPS / ESTADO DEL SISTEMA */}
                 <Grid item xs={12} lg={4}>
                     <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%', bgcolor: '#f8f9fa' }}>
                         <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#455a64' }}>
@@ -224,19 +240,18 @@ const StatsDashboard = () => {
                             </Box>
 
                             <Box sx={{ p: 2, bgcolor: 'white', borderRadius: 2, borderLeft: '4px solid #2196f3', boxShadow: 1 }}>
-                                <Typography variant="body2" color="text.secondary">Moneda Base</Typography>
-                                <Typography variant="body1" fontWeight="bold">Quetzales (GTQ)</Typography>
+                                <Typography variant="body2" color="text.secondary">Rol Actual</Typography>
+                                <Typography variant="body1" fontWeight="bold">
+                                    {userRole === 'admin' ? "Administrador (Acceso Total)" : "Usuario (Vista Restringida)"}
+                                </Typography>
                             </Box>
 
                             <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                                    Recuerda:
+                                    Recordatorio:
                                 </Typography>
                                 <Typography variant="body2" paragraph>
-                                    • Si el stock llega a 0, el producto no aparecerá disponible para venta.
-                                </Typography>
-                                <Typography variant="body2">
-                                    • Revisa los reportes mensuales para ver tendencias de venta.
+                                    • Los datos se actualizan automáticamente al hacer movimientos de inventario.
                                 </Typography>
                             </Box>
                         </Box>
