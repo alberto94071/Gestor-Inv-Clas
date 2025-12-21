@@ -10,18 +10,13 @@ import {
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
-// Librerías para QR y Renderizado
-import QRCode from 'react-qr-code';
-import { createRoot } from 'react-dom/client';
-
 // Helper moneda
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// URLs de iconos para redes sociales (usamos CDN públicas para fiabilidad)
+// URLs de iconos (Usamos imágenes directas para asegurar que salgan en la impresión)
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
-
 
 const PointOfSale = () => {
     // --- ESTADOS ---
@@ -32,7 +27,7 @@ const PointOfSale = () => {
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
     
-    // Guardar última venta para re-imprimir
+    // Guardar última venta
     const [lastSaleCart, setLastSaleCart] = useState(null);
     const [lastTicketId, setLastTicketId] = useState(null);
 
@@ -41,7 +36,7 @@ const PointOfSale = () => {
     // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
 
-    // --- 1. CARGA INICIAL Y GESTIÓN DE MEMORIA ---
+    // --- 1. CARGA INICIAL ---
     const loadInventory = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -55,16 +50,13 @@ const PointOfSale = () => {
         }
     };
 
-    // Al iniciar: Cargar Inventario + Recuperar Carrito Guardado + Fusionar lo nuevo
     useEffect(() => {
         loadInventory();
         focusInput();
-
         const savedCart = localStorage.getItem('pos_persistent_cart');
         let finalCart = savedCart ? JSON.parse(savedCart) : [];
 
         const incomingTempCart = localStorage.getItem('pos_cart_temp');
-        
         if (incomingTempCart) {
             try {
                 const newItems = JSON.parse(incomingTempCart);
@@ -80,14 +72,11 @@ const PointOfSale = () => {
                     setSuccessMsg("Productos agregados desde el Inventario");
                     localStorage.removeItem('pos_cart_temp');
                 }
-            } catch (e) {
-                console.error("Error al fusionar carritos", e);
-            }
+            } catch (e) { console.error(e); }
         }
         setCart(finalCart);
     }, []);
 
-    // --- 2. AUTO-GUARDADO ---
     useEffect(() => {
         localStorage.setItem('pos_persistent_cart', JSON.stringify(cart));
     }, [cart]);
@@ -96,7 +85,7 @@ const PointOfSale = () => {
         setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 100);
     };
 
-    // --- 3. LÓGICA DEL CARRITO ---
+    // --- LÓGICA DE CARRITO ---
     const addProductToCart = (code) => {
         setError(null);
         setSuccessMsg(null);
@@ -106,7 +95,6 @@ const PointOfSale = () => {
         if (product.cantidad <= 0) { setError(`¡Sin stock de ${product.nombre}!`); return; }
 
         const existingItem = cart.find(item => item.id === product.id);
-        
         if (existingItem) {
             updateQuantity(existingItem.id, existingItem.qty + 1, product.cantidad);
         } else {
@@ -137,7 +125,7 @@ const PointOfSale = () => {
 
     const handleCancelSale = () => {
         if (cart.length === 0) return;
-        if (window.confirm("¿Estás seguro de cancelar esta venta y limpiar el carrito?")) {
+        if (window.confirm("¿Estás seguro de cancelar esta venta?")) {
             setCart([]);
             localStorage.removeItem('pos_persistent_cart');
             setSuccessMsg("Venta cancelada.");
@@ -145,14 +133,13 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 4. PROCESAR VENTA ---
+    // --- PROCESAR VENTA ---
     const handleCheckout = async () => {
         if (cart.length === 0) return;
         setLoading(true);
         setError(null);
         try {
             const token = localStorage.getItem('authToken');
-            
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
@@ -163,7 +150,6 @@ const PointOfSale = () => {
             
             const currentCart = [...cart];
             const ticketId = Date.now();
-            
             setLastSaleCart(currentCart);
             setLastTicketId(ticketId);
 
@@ -173,7 +159,6 @@ const PointOfSale = () => {
             setCart([]); 
             localStorage.removeItem('pos_persistent_cart');
             loadInventory();
-
         } catch (err) {
             const msg = err.response?.data?.error || "Error al procesar la venta.";
             setError(msg);
@@ -183,7 +168,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 5. IMPRESIÓN (LÓGICA DUAL: CARTA DISEÑO NUEVO vs 80MM) ---
+    // --- IMPRESIÓN (CORREGIDA) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -192,18 +177,22 @@ const PointOfSale = () => {
             const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
             const config = res.data || {};
 
-            // DETECTAR TIPO DE PAPEL
             const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
-
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
-            
-            // ================= ESTILOS CARTA (NUEVO DISEÑO "RECEIPT" MEJORADO) =================
+
+            // Generamos la URL del QR directamente como imagen (API pública segura)
+            // Esto asegura que se imprima sin scripts complejos
+            const qrUrl = config.instagram_url 
+                ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
+                : '';
+
+            // ================= ESTILOS CARTA (CORREGIDO PARA IMPRESIÓN) =================
             const estilosCarta = `
                 @page { size: letter portrait; margin: 0.8cm; }
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 
                 .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
                 .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -223,32 +212,31 @@ const PointOfSale = () => {
                 .totals-box { width: 40%; }
                 .total-row.final { display: flex; justify-content: space-between; border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 20px; margin-top: 5px; padding: 10px 0; }
 
-                /* Footer Creativo Aumentado */
                 .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
                 
-                /* Círculo "Gracias" más grande */
+                /* CORRECCIÓN: Forzamos la impresión del fondo negro */
                 .stamp-container { text-align: center; }
                 .stamp { 
-                    width: 150px; height: 150px; /* Aumentado */
-                    background: #333; color: #fff; 
+                    width: 150px; height: 150px; 
+                    background-color: #333 !important; /* Importante */
+                    color: #fff !important; 
                     border-radius: 50%; display: flex; align-items: center; justify-content: center; 
                     font-family: 'Brush Script MT', cursive; 
-                    font-size: 40px; /* Aumentado */
+                    font-size: 40px; 
                     transform: rotate(-10deg);
                     box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333;
+                    -webkit-print-color-adjust: exact; /* Para Chrome/Edge */
+                    print-color-adjust: exact; /* Estándar */
                 }
                 
-                /* Redes Sociales Aumentadas */
-                .socials { text-align: right; font-size: 18px; /* Aumentado */ line-height: 2.5; }
+                .socials { text-align: right; font-size: 18px; line-height: 2.5; }
                 .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
-                .social-icon { width: 28px; height: 28px; } /* Iconos reales */
-                .qr-container-inline { margin-left: 15px; border: 2px solid #333; padding: 5px; background: #fff; display: inline-block; vertical-align: middle; }
+                .social-icon { width: 28px; height: 28px; object-fit: contain; } 
+                .qr-img { margin-left: 15px; border: 2px solid #333; padding: 2px; background: #fff; width: 70px; height: 70px; display: inline-block; vertical-align: middle; }
 
-                /* Mensaje Final Grande al Pie */
                 .footer-large-msg { margin-top: 50px; text-align: center; font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
             `;
 
-            // ================= HTML CARTA (NUEVO DISEÑO) =================
             const contenidoCarta = `
                 <div class="header">
                     <div class="logo-circle">
@@ -314,14 +302,14 @@ const PointOfSale = () => {
                             <img src="${ICON_FB}" class="social-icon" alt="Facebook"/>
                         </div>
                         <div class="social-item">
-                             <div id="qr-code-inline" class="qr-container-inline"></div>
+                             ${qrUrl ? `<img src="${qrUrl}" class="qr-img" alt="QR" />` : ''}
                             <span>@potters_store_</span>
                             <img src="${ICON_IG}" class="social-icon" alt="Instagram"/>
                         </div>
                     </div>
                 </div>
 
-                <div class="footer-large-msg">
+                 <div class="footer-large-msg">
                     ${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}
                  </div>
             `;
@@ -337,11 +325,9 @@ const PointOfSale = () => {
                 th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
                 td { vertical-align: top; font-size: 11px; padding: 4px 0; }
                 .footer-contact { margin-top: 15px; font-size: 10px; text-align: center; }
-                /* Estilo para mensaje final grande en 80mm */
                 .footer-large-msg-80 { margin-top: 20px; text-align: center; font-size: 16px; font-weight: bold; text-transform: uppercase; }
             `;
 
-            // ================= HTML 80MM (Térmico) =================
             const contenido80mm = `
                 <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
                 <div class="center">Comprobante de Compra</div>
@@ -408,22 +394,12 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // Renderizado del QR (Solo si es CARTA y hay URL de Instagram)
-            if (esCarta && config.instagram_url) {
-                printWindow.onload = () => {
-                    // Buscamos el contenedor específico dentro de la sección de redes sociales
-                    const container = printWindow.document.getElementById('qr-code-inline');
-                    if (container) {
-                        const root = createRoot(container);
-                        // Tamaño del QR ajustado para que se vea bien junto al texto
-                        root.render(<QRCode value={config.instagram_url} size={70} />);
-                    }
-                    setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
-                };
-            } else {
-                // Para 80mm o si no hay QR, imprimimos directo
-                setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 500);
-            }
+            // Esperamos a que las imágenes carguen antes de imprimir
+            setTimeout(() => { 
+                printWindow.focus(); 
+                printWindow.print(); 
+                printWindow.close(); 
+            }, 1000); // Damos 1 segundo para cargar QR e iconos
 
         } catch (e) {
             console.error(e);
