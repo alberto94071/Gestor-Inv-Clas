@@ -1,10 +1,10 @@
-// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const db = require('./db/db');
-const cors = require('cors'); // ¡Asegúrate de haber ejecutado: npm install cors!
+const cors = require('cors'); 
 const reportRoutes = require('./routes/reports');
-const usersRoutes = require('./routes/users'); // <--- AGREGAR ESTO
+const usersRoutes = require('./routes/users'); // Importación de rutas de usuarios
+
 // --- Cargar variables de entorno ---
 dotenv.config();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 
 // --- 1. Configuración de CORS ---
-// Permite que el frontend (localhost:5173) acceda a esta API (localhost:3000)
 app.use(cors({
     origin: 'https://gestor-inv-clas.pages.dev',
     credentials: true,
@@ -22,17 +21,15 @@ app.use(cors({
 }));
 
 // --- Middlewares ---
-app.use(express.json()); // Permite a Express leer cuerpos JSON
+app.use(express.json()); 
 
 // --- 2. Conexión a la Base de Datos ---
-// La conexión real se prueba en db/db.js, pero aquí verificamos al iniciar
 db.query('SELECT 1')
   .then(() => {
     console.log('✅ Conexión exitosa a PostgreSQL!');
   })
   .catch((err) => {
     console.error('❌ Error al conectar a PostgreSQL:', err);
-    // Termina el proceso si no se puede conectar a la base de datos
     process.exit(1); 
   });
 
@@ -45,7 +42,11 @@ const inventoryRoutes = require('./routes/inventory');
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/reports', reportRoutes);
-app.use('/api/Users', usersRoutes); // <--- AGREGAR ESTO
+
+// 🟢 CORRECCIÓN AQUÍ: Cambiamos 'Users' (mayúscula) por 'users' (minúscula)
+// Esto debe coincidir exactamente con lo que pide tu frontend
+app.use('/api/users', usersRoutes); 
+
 // --- Manejo de la Raíz ---
 app.get('/', (req, res) => {
     res.send('Servidor de Gestión de Inventario de Ropa (Backend activo)');
@@ -53,5 +54,5 @@ app.get('/', (req, res) => {
 
 // --- 4. Iniciar el Servidor ---
 app.listen(PORT, () => {
-    console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor Express corriendo en el puerto: ${PORT}`);
 });
