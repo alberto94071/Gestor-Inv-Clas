@@ -21,8 +21,16 @@ const StatsDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [userRole, setUserRole] = useState('');
+    
+    // 🟢 ESTADO PARA CORREGIR ERROR DE ANCHO/ALTO (-1)
+    // Solo renderizamos la gráfica cuando el componente ya se montó en pantalla
+    const [mounted, setMounted] = useState(false);
 
-    // 1. Cargar datos (Inventario y Ventas)
+    useEffect(() => {
+        setMounted(true); // Activa la bandera de montaje
+    }, []);
+
+    // 1. Cargar datos
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -48,11 +56,11 @@ const StatsDashboard = () => {
                     });
                     setSalesHistory(salesRes.data);
                 } catch (e) {
-                    console.warn("No se pudo cargar el historial de ventas", e);
+                    console.warn("Error historial:", e);
                 }
 
             } catch (err) {
-                console.error("Error cargando dashboard:", err);
+                console.error("Error dashboard:", err);
                 setError("No se pudieron cargar los datos.");
             } finally {
                 setLoading(false);
@@ -60,6 +68,26 @@ const StatsDashboard = () => {
         };
         fetchData();
     }, []);
+
+    // 🟢 FUNCIÓN DE AYUDA PARA LEER TUS FECHAS (DD-MM-YYYY)
+    const parseCustomDate = (dateString) => {
+        if (!dateString) return new Date();
+        // Si ya es ISO (contiene T o guiones formato año primero), dejarlo pasar
+        if (dateString.includes('T') || dateString.match(/^\d{4}-/)) return new Date(dateString);
+        
+        // Si es formato DD-MM-YYYY HH:mm (Tu formato)
+        try {
+            const parts = dateString.split(' '); // Separar fecha de hora
+            const dateParts = parts[0].split('-'); // [20, 12, 2025]
+            if (dateParts.length === 3) {
+                // new Date(Año, Mes (0-11), Día)
+                return new Date(dateParts[2], parseInt(dateParts[1]) - 1, dateParts[0]);
+            }
+        } catch (e) {
+            return new Date();
+        }
+        return new Date(dateString);
+    };
 
     // 2. Calcular Estadísticas
     const stats = useMemo(() => {
@@ -77,7 +105,7 @@ const StatsDashboard = () => {
         // GRÁFICA 1: STOCK POR MARCA
         const brandMap = {};
         inventory.forEach(item => {
-            const brand = item.marca ? item.marca.toUpperCase() : 'SIN MARCA';
+            const brand = item.marca ? item.marca.toUpperCase() : 'OTROS';
             const qty = parseInt(item.cantidad) || 0;
             if (!brandMap[brand]) brandMap[brand] = 0;
             brandMap[brand] += qty;
@@ -87,19 +115,21 @@ const StatsDashboard = () => {
             stock: brandMap[key]
         })).sort((a, b) => b.stock - a.stock).slice(0, 8); 
 
-        // GRÁFICA 2: VENTAS POR DÍA
+        // GRÁFICA 2: VENTAS POR DÍA (Usando parseCustomDate)
         const daysMap = {
             'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0, 'Domingo': 0
         };
 
         salesHistory.forEach(sale => {
-            const date = new Date(sale.fecha_hora);
-            const dayIndex = date.getDay(); // 0 = Domingo
-            const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-            const dayName = dayNames[dayIndex];
-            
-            if (daysMap[dayName] !== undefined) {
-                daysMap[dayName] += parseFloat(sale.totalVenta || (sale.precio_unitario * sale.cantidad));
+            if (sale.fecha_hora) {
+                const date = parseCustomDate(sale.fecha_hora);
+                const dayIndex = date.getDay(); // 0 = Domingo
+                const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                const dayName = dayNames[dayIndex];
+                
+                if (daysMap[dayName] !== undefined) {
+                    daysMap[dayName] += parseFloat(sale.totalVenta || (sale.precio_unitario * sale.cantidad));
+                }
             }
         });
 
@@ -204,20 +234,26 @@ const StatsDashboard = () => {
                         </Typography>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🔴 SOLUCIÓN DEFINITIVA: Usar div simple + minWidth={0} */}
-                        <div style={{ width: '100%', height: 350 }}> 
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
-                                    <YAxis axisLine={false} tickLine={false} />
-                                    <RechartsTooltip 
-                                        formatter={(value) => [formatCurrency(value), 'Venta Total']}
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    />
-                                    <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
+                        {/* 🟢 SOLUCIÓN DEFINITIVA WIDTH(-1): 
+                           1. Usamos div normal (no Box).
+                           2. Width 99% (truco para evitar colisión Flex).
+                           3. Renderizado condicional {mounted && ...}
+                        */}
+                        <div style={{ width: '99%', height: 350 }}> 
+                            {mounted && (
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                    <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                        <YAxis axisLine={false} tickLine={false} />
+                                        <RechartsTooltip 
+                                            formatter={(value) => [formatCurrency(value), 'Venta Total']}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                        />
+                                        <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </Paper>
                 </Grid>
@@ -230,24 +266,25 @@ const StatsDashboard = () => {
                         </Typography>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🔴 SOLUCIÓN DEFINITIVA: Usar div simple + minWidth={0} */}
-                        <div style={{ width: '100%', height: 350 }}> 
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
-                                    <YAxis axisLine={false} tickLine={false} />
-                                    <RechartsTooltip 
-                                        formatter={(value) => [`${value} Unidades`, 'Stock']}
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    />
-                                    <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
-                                        {stats.chartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={['#3f51b5', '#009688', '#ff9800', '#f44336', '#9c27b0', '#795548', '#607d8b', '#e91e63'][index % 8]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <div style={{ width: '99%', height: 350 }}> 
+                            {mounted && (
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                    <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                        <YAxis axisLine={false} tickLine={false} />
+                                        <RechartsTooltip 
+                                            formatter={(value) => [`${value} Unidades`, 'Stock']}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                        />
+                                        <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
+                                            {stats.chartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={['#3f51b5', '#009688', '#ff9800', '#f44336', '#9c27b0', '#795548', '#607d8b', '#e91e63'][index % 8]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </Paper>
                 </Grid>
