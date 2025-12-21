@@ -10,17 +10,19 @@ import {
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
-// --- CONFIGURACIÓN DE ICONOS PARA IMPRESIÓN ---
+// --- ICONOS ---
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
 
-// Helper para moneda
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// --- COMPONENTE DE FILA (ROW) ---
+// --- COMPONENTE FILA ---
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
+
+    // Generamos una referencia visual basada en la hora exacta del primer item
+    const displayRef = `REF-${new Date(row.fecha).getTime().toString().slice(-6)}`;
 
     return (
         <>
@@ -31,10 +33,20 @@ const Row = ({ row, onReprint }) => {
                     </IconButton>
                 </TableCell>
                 <TableCell component="th" scope="row">
-                    <Box display="flex" alignItems="center" gap={1}>
-                        <CalendarMonth fontSize="small" color="action" />
-                        {new Date(row.fecha).toLocaleDateString()} {new Date(row.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    <Box display="flex" flexDirection="column">
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <CalendarMonth fontSize="small" color="action" />
+                            <Typography variant="body2" fontWeight="bold">
+                                {new Date(row.fecha).toLocaleDateString()}
+                            </Typography>
+                        </Box>
+                        <Typography variant="caption" color="textSecondary" sx={{ ml: 3 }}>
+                            {new Date(row.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}
+                        </Typography>
                     </Box>
+                </TableCell>
+                <TableCell>
+                    <Chip label={displayRef} size="small" variant="outlined" sx={{fontFamily: 'monospace', fontSize: '0.7rem'}} />
                 </TableCell>
                 <TableCell>
                      <Box display="flex" alignItems="center" gap={1}>
@@ -43,7 +55,7 @@ const Row = ({ row, onReprint }) => {
                     </Box>
                 </TableCell>
                 <TableCell align="right">
-                    <Chip label={`${row.items.length} ítems`} size="small" color={open ? "primary" : "default"} variant="outlined"/>
+                    <Chip label={`${row.items.length} ítems`} size="small" color="primary" />
                 </TableCell>
                 <TableCell align="right">
                     <Typography fontWeight="bold" color="green">
@@ -52,40 +64,39 @@ const Row = ({ row, onReprint }) => {
                 </TableCell>
                 <TableCell align="center">
                     <Button 
-                        variant="outlined" 
+                        variant="contained" 
                         size="small" 
-                        color="secondary"
+                        color="inherit"
                         startIcon={<Print />}
-                        onClick={() => onReprint(row)}
+                        onClick={() => onReprint(row, displayRef)}
+                        sx={{ fontSize: '0.7rem' }}
                     >
-                        Re-imprimir
+                        Imprimir
                     </Button>
                 </TableCell>
             </TableRow>
 
             <TableRow>
-                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
                     <Collapse in={open} timeout="auto" unmountOnExit>
-                        <Box sx={{ margin: 2, padding: 2, backgroundColor: '#fff', borderRadius: 2, boxShadow: 1 }}>
-                            <Typography variant="subtitle2" gutterBottom component="div" sx={{fontWeight:'bold', color: '#555'}}>
-                                📦 Detalle de Artículos
+                        <Box sx={{ margin: 2, padding: 2, backgroundColor: '#fff', borderRadius: 2, border: '1px solid #eee' }}>
+                            <Typography variant="subtitle2" gutterBottom sx={{fontWeight:'bold', color: '#555'}}>
+                                🛒 Artículos en esta venta:
                             </Typography>
-                            <Table size="small" aria-label="purchases">
+                            <Table size="small">
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Producto</TableCell>
                                         <TableCell>Código</TableCell>
-                                        <TableCell align="right">Cantidad</TableCell>
-                                        <TableCell align="right">Precio Unit.</TableCell>
-                                        <TableCell align="right">Total</TableCell>
+                                        <TableCell align="right">Cant.</TableCell>
+                                        <TableCell align="right">P. Unit.</TableCell>
+                                        <TableCell align="right">Subtotal</TableCell>
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
                                     {row.items.map((item, index) => (
                                         <TableRow key={index}>
-                                            <TableCell component="th" scope="row" sx={{fontWeight:'bold'}}>
-                                                {item.producto}
-                                            </TableCell>
+                                            <TableCell sx={{fontWeight:'bold'}}>{item.producto}</TableCell>
                                             <TableCell>{item.codigo}</TableCell>
                                             <TableCell align="right">{item.cantidad}</TableCell>
                                             <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
@@ -104,25 +115,24 @@ const Row = ({ row, onReprint }) => {
     );
 };
 
-// --- COMPONENTE PRINCIPAL (Renombrado a Reports) ---
+// --- COMPONENTE PRINCIPAL ---
 const Reports = () => {
     const [salesData, setSalesData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // 1. Cargar datos del servidor
     useEffect(() => {
         const fetchSales = async () => {
             setLoading(true);
             try {
                 const token = localStorage.getItem('authToken');
-                // Llama a la ruta corregida del backend
                 const response = await API.get('/inventory/sales-history', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 
-                const grouped = groupSalesData(response.data);
-                setSalesData(grouped);
+                // Procesamos los datos con el algoritmo inteligente
+                const processed = processSalesSmartly(response.data);
+                setSalesData(processed);
 
             } catch (err) {
                 console.error(err);
@@ -135,37 +145,72 @@ const Reports = () => {
         fetchSales();
     }, []);
 
-    // Función de agrupación
-    const groupSalesData = (flatItems) => {
-        const groups = {};
-        flatItems.forEach(item => {
-            // Generamos una clave única. Si no hay ticket_id, usamos fecha+vendedor
-            const key = item.ticket_id || `${item.fecha_hora}_${item.vendedor}`;
-            
-            if (!groups[key]) {
-                groups[key] = {
-                    id: key,
-                    fecha: item.fecha_hora || item.created_at, 
-                    vendedor: item.vendedor,
-                    totalVenta: 0,
-                    items: []
-                };
-            }
-            
-            groups[key].items.push({
-                producto: item.producto,
-                codigo: item.codigo,
-                cantidad: item.cantidad,
-                precioUnitario: item.precio_unitario,
-            });
+    // --- ALGORITMO INTELIGENTE DE AGRUPACIÓN ---
+    // Agrupa por "Proximidad de Tiempo" en lugar de minutos exactos.
+    const processSalesSmartly = (flatItems) => {
+        if (!flatItems || flatItems.length === 0) return [];
 
-            groups[key].totalVenta += (item.precio_unitario * item.cantidad); 
-        });
-        return Object.values(groups).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        // 1. Asegurar orden descendente (el más reciente primero)
+        // Usamos la fecha_hora que viene de la BD
+        const sortedItems = [...flatItems].sort((a, b) => 
+            new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
+        );
+
+        const groups = [];
+        let currentGroup = null;
+
+        // 2. Iterar y agrupar por cercanía
+        for (const item of sortedItems) {
+            const itemTime = new Date(item.fecha_hora).getTime();
+
+            // Si ya tenemos un grupo abierto, verificamos si este ítem pertenece a él
+            if (currentGroup) {
+                const groupTime = new Date(currentGroup.fecha).getTime();
+                
+                // Calculamos la diferencia en segundos
+                const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
+
+                // UMBRAL DE SEGURIDAD: 10 SEGUNDOS
+                // Como el POS envía todo en bucle, la diferencia será de ms. 
+                // 10 segundos cubre holgadamente cualquier retraso de red o cambio de minuto.
+                if (diffSeconds <= 10 && item.vendedor === currentGroup.vendedor) {
+                    
+                    // Pertenece al grupo actual
+                    currentGroup.items.push({
+                        producto: item.producto,
+                        codigo: item.codigo,
+                        cantidad: item.cantidad,
+                        precioUnitario: item.precio_unitario,
+                    });
+                    // Sumamos al total
+                    currentGroup.totalVenta += (Number(item.precio_unitario) * Number(item.cantidad));
+                    
+                    // Continuamos al siguiente item
+                    continue; 
+                }
+            }
+
+            // Si no pertenece (o es el primero), creamos un NUEVO GRUPO
+            currentGroup = {
+                id: item.id, // ID referencial del primer item
+                fecha: item.fecha_hora,
+                vendedor: item.vendedor || 'Sistema',
+                totalVenta: (Number(item.precio_unitario) * Number(item.cantidad)),
+                items: [{
+                    producto: item.producto,
+                    codigo: item.codigo,
+                    cantidad: item.cantidad,
+                    precioUnitario: item.precio_unitario,
+                }]
+            };
+            groups.push(currentGroup);
+        }
+
+        return groups;
     };
 
-    // --- FUNCIÓN DE RE-IMPRESIÓN (DISEÑO ACTUALIZADO) ---
-    const handleReprint = async (saleRow) => {
+    // --- FUNCIÓN DE IMPRESIÓN ---
+    const handleReprint = async (saleRow, displayRef) => {
         try {
             const token = localStorage.getItem('authToken');
             const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
@@ -181,16 +226,14 @@ const Reports = () => {
                 precio_venta: i.precioUnitario
             }));
 
-            // Usamos la fecha original de la venta
-            const ticketId = saleRow.id.toString().substring(0, 15);
+            const ticketId = displayRef;
             const totalPrint = saleRow.totalVenta;
 
-             // QR como imagen directa
             const qrUrl = config.instagram_url 
             ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
             : '';
 
-            // --- ESTILOS CARTA (Con círculo negro y redes sociales corregidas) ---
+            // ESTILOS (Optimizados)
             const estilosCarta = `
                 @page { size: letter portrait; margin: 0.8cm; }
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -209,21 +252,9 @@ const Reports = () => {
                 .bottom-section { display: flex; justify-content: flex-end; margin-top: 10px; }
                 .totals-box { width: 40%; }
                 .total-row.final { display: flex; justify-content: space-between; border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 20px; margin-top: 5px; padding: 10px 0; }
-                
                 .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
-                
-                /* Sello corregido para salir negro */
                 .stamp-container { text-align: center; }
-                .stamp { 
-                    width: 150px; height: 150px; 
-                    background-color: #333 !important; color: #fff !important; 
-                    border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-                    font-family: 'Brush Script MT', cursive; font-size: 40px; 
-                    transform: rotate(-10deg); 
-                    box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333; 
-                    -webkit-print-color-adjust: exact; print-color-adjust: exact; 
-                }
-                
+                .stamp { width: 150px; height: 150px; background-color: #333 !important; color: #fff !important; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Brush Script MT', cursive; font-size: 40px; transform: rotate(-10deg); box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .socials { text-align: right; font-size: 18px; line-height: 2.5; }
                 .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
                 .social-icon { width: 28px; height: 28px; object-fit: contain; } 
@@ -231,7 +262,6 @@ const Reports = () => {
                 .footer-large-msg { margin-top: 50px; text-align: center; font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
             `;
 
-            // --- HTML CARTA ---
             const contenidoCarta = `
                 <div class="header">
                     <div class="logo-circle">
@@ -243,7 +273,7 @@ const Reports = () => {
                 </div>
                 <div class="business-name">${config.nombre_empresa || "NOMBRE EMPRESA"}</div>
                 <div class="info-bar">
-                    <span>Ref: ${ticketId}</span>
+                    <span>${ticketId}</span>
                     <span>Fecha Original: ${new Date(saleRow.fecha).toLocaleDateString('es-GT')}</span>
                 </div>
                 <table>
@@ -286,7 +316,6 @@ const Reports = () => {
                 <div class="footer-large-msg">${config.mensaje_final || "GRACIAS POR SU COMPRA"}</div>
             `;
 
-            // --- ESTILOS 80MM ---
             const estilos80mm = `
                 @page { size: 80mm auto; margin: 0; }
                 body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
@@ -300,11 +329,10 @@ const Reports = () => {
                 .footer-large-msg-80 { margin-top: 20px; text-align: center; font-size: 16px; font-weight: bold; text-transform: uppercase; }
             `;
 
-            // --- HTML 80MM ---
             const contenido80mm = `
                 <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
                 <div class="center">Copia de Comprobante</div>
-                <div class="center">Ref: ${ticketId}</div>
+                <div class="center">${ticketId}</div>
                 <br/>
                 <div class="info-row"><span>Fecha: ${new Date(saleRow.fecha).toLocaleDateString('es-GT')}</span></div>
                 
@@ -339,7 +367,6 @@ const Reports = () => {
                 <div class="footer-large-msg-80">${config.mensaje_final || "GRACIAS"}</div>
             `;
 
-            // INYECCIÓN FINAL
             const html = `<html><head><title>Copia ${ticketId}</title><style>${esCarta ? estilosCarta : estilos80mm}</style></head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`;
             printWindow.document.write(html);
             printWindow.document.close();
@@ -368,6 +395,7 @@ const Reports = () => {
                             <TableRow>
                                 <TableCell />
                                 <TableCell>Fecha y Hora</TableCell>
+                                <TableCell>Ref. Interna</TableCell>
                                 <TableCell>Vendedor</TableCell>
                                 <TableCell align="right">Ítems</TableCell>
                                 <TableCell align="right">Total Venta</TableCell>
@@ -380,7 +408,7 @@ const Reports = () => {
                             ))}
                             {salesData.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center">No hay ventas registradas aún.</TableCell>
+                                    <TableCell colSpan={7} align="center">No hay ventas registradas aún.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
