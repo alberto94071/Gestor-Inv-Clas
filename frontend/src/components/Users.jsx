@@ -27,7 +27,7 @@ const Users = () => {
     const fetchUsers = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            const res = await API.get('/users', { 
+            const res = await API.get('/Users', { 
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(res.data);
@@ -73,13 +73,13 @@ const Users = () => {
             const token = localStorage.getItem('authToken');
             if (selectedUser) {
                 // EDITAR (Ruta /users)
-                await API.put(`/users/${selectedUser.id}`, formData, {
+                await API.put(`/Users/${selectedUser.id}`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 showToast("Usuario actualizado");
             } else {
                 // REGISTRAR (Ruta /users/register)
-                await API.post('/users/register', formData, {
+                await API.post('/Users/register', formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 showToast("Usuario creado");
@@ -94,7 +94,7 @@ const Users = () => {
     const handleDelete = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            await API.delete(`/users/${selectedUser.id}`, {
+            await API.delete(`/Users/${selectedUser.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             showToast("Usuario eliminado");
