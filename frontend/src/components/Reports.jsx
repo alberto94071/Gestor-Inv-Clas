@@ -388,4 +388,4 @@ const SalesHistory = () => {
     );
 };
 
-export default SalesHistory;
+export default Reports;
