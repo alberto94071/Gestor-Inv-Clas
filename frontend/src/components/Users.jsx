@@ -6,7 +6,7 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, TextField,
     MenuItem, Chip, Avatar, Alert, Snackbar, CircularProgress
 } from '@mui/material';
-import { Edit, Delete, PersonAdd, Save, Close } from '@mui/icons-material';
+import { Edit, Delete, PersonAdd, Save } from '@mui/icons-material';
 
 const Users = () => {
     const [users, setUsers] = useState([]);
@@ -16,7 +16,6 @@ const Users = () => {
     const [selectedUser, setSelectedUser] = useState(null);
     const [toast, setToast] = useState({ open: false, msg: '', severity: 'success' });
 
-    // Estado para el formulario
     const [formData, setFormData] = useState({
         nombre: '',
         email: '',
@@ -24,15 +23,16 @@ const Users = () => {
         rol: 'cajero'
     });
 
+    // 🟢 Cambiado de /users a /usuarios para coincidir con tu base de datos
     const fetchUsers = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            const res = await API.get('/users', { // Ajusta esta ruta según tu backend
+            const res = await API.get('/usuarios', { 
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(res.data);
         } catch (err) {
-            showToast("Error al cargar usuarios", "error");
+            showToast("Error al cargar la lista de usuarios", "error");
         } finally {
             setLoading(false);
         }
@@ -60,49 +60,48 @@ const Users = () => {
     };
 
     const handleSave = async () => {
-        // Validaciones básicas
         if (!formData.nombre || !formData.email || (!selectedUser && !formData.password)) {
-            showToast("Por favor completa todos los campos", "warning");
+            showToast("Completa los campos obligatorios", "warning");
             return;
         }
         if (!validateEmail(formData.email)) {
-            showToast("Formato de correo inválido", "error");
+            showToast("El correo no tiene un formato válido", "error");
             return;
         }
 
         try {
             const token = localStorage.getItem('authToken');
             if (selectedUser) {
-                // EDITAR
-                await API.put(`/users/${selectedUser.id}`, formData, {
+                // ACTUALIZAR (Ruta corregida a /usuarios)
+                await API.put(`/usuarios/${selectedUser.id}`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                showToast("Usuario actualizado con éxito");
+                showToast("Cambios guardados");
             } else {
-                // CREAR
-                await API.post('/users/register', formData, {
+                // REGISTRAR (Ruta corregida a /usuarios)
+                await API.post('/usuarios/register', formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                showToast("Usuario creado con éxito");
+                showToast("Usuario registrado exitosamente");
             }
             setOpenModal(false);
             fetchUsers();
         } catch (err) {
-            showToast(err.response?.data?.error || "Error al guardar usuario", "error");
+            showToast(err.response?.data?.error || "Error al procesar la solicitud", "error");
         }
     };
 
     const handleDelete = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            await API.delete(`/users/${selectedUser.id}`, {
+            await API.delete(`/usuarios/${selectedUser.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            showToast("Usuario eliminado");
+            showToast("Usuario eliminado correctamente");
             setOpenDelete(false);
             fetchUsers();
         } catch (err) {
-            showToast("No se pudo eliminar al usuario", "error");
+            showToast("Error al intentar eliminar", "error");
         }
     };
 
@@ -111,19 +110,19 @@ const Users = () => {
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" fontWeight="bold" color="primary">Gestión de Usuarios</Typography>
+                <Typography variant="h4" fontWeight="bold">Personal de la Empresa</Typography>
                 <Button variant="contained" startIcon={<PersonAdd />} onClick={() => handleOpenModal()}>
-                    Nuevo Usuario
+                    Agregar Usuario
                 </Button>
             </Box>
 
-            <TableContainer component={Paper} elevation={3} sx={{ borderRadius: 2 }}>
+            <TableContainer component={Paper} elevation={4} sx={{ borderRadius: 3 }}>
                 <Table>
-                    <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                    <TableHead sx={{ bgcolor: '#f0f2f5' }}>
                         <TableRow>
-                            <TableCell>Usuario</TableCell>
-                            <TableCell>Correo</TableCell>
-                            <TableCell>Rol</TableCell>
+                            <TableCell>Nombre</TableCell>
+                            <TableCell>Email / Usuario</TableCell>
+                            <TableCell>Nivel de Acceso</TableCell>
                             <TableCell align="center">Acciones</TableCell>
                         </TableRow>
                     </TableHead>
@@ -132,17 +131,18 @@ const Users = () => {
                             <TableRow key={user.id} hover>
                                 <TableCell>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                        <Avatar sx={{ bgcolor: user.rol === 'admin' ? '#f57c00' : '#1976d2' }}>
+                                        <Avatar sx={{ bgcolor: user.rol === 'admin' ? '#d32f2f' : '#2e7d32' }}>
                                             {user.nombre.charAt(0).toUpperCase()}
                                         </Avatar>
-                                        <Typography fontWeight="medium">{user.nombre}</Typography>
+                                        <Typography variant="body1">{user.nombre}</Typography>
                                     </Box>
                                 </TableCell>
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell>
                                     <Chip 
-                                        label={user.rol.toUpperCase()} 
-                                        color={user.rol === 'admin' ? 'secondary' : 'primary'} 
+                                        label={user.rol === 'admin' ? 'Administrador' : 'Cajero'} 
+                                        color={user.rol === 'admin' ? 'error' : 'success'} 
+                                        variant="outlined"
                                         size="small" 
                                     />
                                 </TableCell>
@@ -156,62 +156,42 @@ const Users = () => {
                 </Table>
             </TableContainer>
 
-            {/* MODAL CREAR/EDITAR */}
+            {/* MODAL FORMULARIO */}
             <Dialog open={openModal} onClose={() => setOpenModal(false)} fullWidth maxWidth="xs">
-                <DialogTitle>{selectedUser ? 'Editar Usuario' : 'Registrar Nuevo Usuario'}</DialogTitle>
+                <DialogTitle sx={{ fontWeight: 'bold' }}>{selectedUser ? 'Modificar Datos' : 'Nuevo Registro'}</DialogTitle>
                 <DialogContent>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                        <TextField label="Nombre Completo" fullWidth value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} />
+                        <TextField label="Correo" fullWidth value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
                         <TextField 
-                            label="Nombre Completo" 
-                            fullWidth 
-                            value={formData.nombre}
-                            onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                            label={selectedUser ? "Cambiar Contraseña (opcional)" : "Contraseña"} 
+                            type="password" fullWidth value={formData.password} 
+                            onChange={(e) => setFormData({...formData, password: e.target.value})} 
                         />
-                        <TextField 
-                            label="Correo Electrónico" 
-                            fullWidth 
-                            value={formData.email}
-                            onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        />
-                        <TextField 
-                            label={selectedUser ? "Nueva Contraseña (opcional)" : "Contraseña"} 
-                            type="password" 
-                            fullWidth 
-                            value={formData.password}
-                            onChange={(e) => setFormData({...formData, password: e.target.value})}
-                        />
-                        <TextField
-                            select
-                            label="Rol"
-                            value={formData.rol}
-                            onChange={(e) => setFormData({...formData, rol: e.target.value})}
-                        >
-                            <MenuItem value="cajero">Cajero / Vendedor</MenuItem>
+                        <TextField select label="Rol en el sistema" value={formData.rol} onChange={(e) => setFormData({...formData, rol: e.target.value})}>
+                            <MenuItem value="cajero">Cajero</MenuItem>
                             <MenuItem value="admin">Administrador</MenuItem>
                         </TextField>
                     </Box>
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
                     <Button onClick={() => setOpenModal(false)} color="inherit">Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Guardar</Button>
+                    <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Guardar Usuario</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* DIÁLOGO ELIMINAR */}
+            {/* CONFIRMAR BORRADO */}
             <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
-                <DialogTitle>Confirmar eliminación</DialogTitle>
-                <DialogContent>¿Estás seguro de que deseas eliminar a <strong>{selectedUser?.nombre}</strong>? Esta acción no se puede deshacer.</DialogContent>
+                <DialogTitle>¿Eliminar acceso?</DialogTitle>
+                <DialogContent>¿Estás seguro de quitar el acceso a <strong>{selectedUser?.nombre}</strong>?</DialogContent>
                 <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={() => setOpenDelete(false)}>Cancelar</Button>
-                    <Button onClick={handleDelete} variant="contained" color="error">Eliminar</Button>
+                    <Button onClick={() => setOpenDelete(false)}>No, volver</Button>
+                    <Button onClick={handleDelete} variant="contained" color="error">Sí, eliminar</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* ALERTAS SNACKBAR */}
-            <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast({...toast, open: false})}>
-                <Alert severity={toast.severity} onClose={() => setToast({...toast, open: false})}>
-                    {toast.msg}
-                </Alert>
+            <Snackbar open={toast.open} autoHideDuration={3000} onClose={() => setToast({...toast, open: false})}>
+                <Alert severity={toast.severity} variant="filled">{toast.msg}</Alert>
             </Snackbar>
         </Container>
     );
