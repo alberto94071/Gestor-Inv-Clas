@@ -54,46 +54,34 @@ const PointOfSale = () => {
         loadInventory();
         focusInput();
 
-        // A. Recuperar lo que ya tenías en el POS (Persistencia)
         const savedCart = localStorage.getItem('pos_persistent_cart');
         let finalCart = savedCart ? JSON.parse(savedCart) : [];
 
-        // B. Revisar si vienen productos nuevos desde el Inventario (F3)
         const incomingTempCart = localStorage.getItem('pos_cart_temp');
         
         if (incomingTempCart) {
             try {
                 const newItems = JSON.parse(incomingTempCart);
                 if (Array.isArray(newItems) && newItems.length > 0) {
-                    
-                    // FUSIÓN INTELIGENTE:
                     newItems.forEach(newItem => {
                         const existingIndex = finalCart.findIndex(item => item.id === newItem.id);
                         if (existingIndex >= 0) {
-                            // Si ya existe, sumamos la cantidad
                             finalCart[existingIndex].qty += newItem.qty;
                         } else {
-                            // Si no existe, lo agregamos
                             finalCart.push(newItem);
                         }
                     });
-                    
                     setSuccessMsg("Productos agregados desde el Inventario");
-                    // Limpiamos la memoria temporal (F3), pero mantenemos la persistente
                     localStorage.removeItem('pos_cart_temp');
                 }
             } catch (e) {
                 console.error("Error al fusionar carritos", e);
             }
         }
-
-        // Guardamos el resultado final en el estado
         setCart(finalCart);
-
     }, []);
 
-    // --- 2. AUTO-GUARDADO (Persistencia) ---
-    // Cada vez que cambies algo en el carrito, se guarda solo
+    // --- 2. AUTO-GUARDADO ---
     useEffect(() => {
         localStorage.setItem('pos_persistent_cart', JSON.stringify(cart));
     }, [cart]);
@@ -103,7 +91,6 @@ const PointOfSale = () => {
     };
 
     // --- 3. LÓGICA DEL CARRITO ---
-
     const addProductToCart = (code) => {
         setError(null);
         setSuccessMsg(null);
@@ -121,7 +108,6 @@ const PointOfSale = () => {
         }
     };
 
-    // Modificar cantidad con botones (+/-)
     const updateQuantity = (id, newQty, maxStock) => {
         if (newQty < 1) return;
         if (newQty > maxStock) { setError(`Stock insuficiente. Máx: ${maxStock}`); return; }
@@ -130,7 +116,6 @@ const PointOfSale = () => {
         focusInput();
     };
 
-    // Modificar precio (Descuentos)
     const updatePrice = (id, newPrice) => {
         setCart(cart.map(item => item.id === id ? { ...item, precio_venta: newPrice } : item));
     };
@@ -144,12 +129,11 @@ const PointOfSale = () => {
         }
     };
 
-    // 🟢 NUEVO: CANCELAR VENTA (LIMPIAR TODO)
     const handleCancelSale = () => {
         if (cart.length === 0) return;
         if (window.confirm("¿Estás seguro de cancelar esta venta y limpiar el carrito?")) {
-            setCart([]); // Limpia visualmente
-            localStorage.removeItem('pos_persistent_cart'); // Limpia memoria
+            setCart([]);
+            localStorage.removeItem('pos_persistent_cart');
             setSuccessMsg("Venta cancelada.");
             focusInput();
         }
@@ -180,8 +164,6 @@ const PointOfSale = () => {
             await handlePrintTicket(currentCart, ticketId);
 
             setSuccessMsg("¡Venta registrada con éxito!");
-            
-            // 🟢 Al cobrar con éxito, ahí sí limpiamos todo
             setCart([]); 
             localStorage.removeItem('pos_persistent_cart');
             loadInventory();
@@ -195,7 +177,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- 5. IMPRESIÓN (LÓGICA DUAL: CARTA vs 80MM) ---
+    // --- 5. IMPRESIÓN (LÓGICA DUAL: CARTA DISEÑO NUEVO vs 80MM) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -205,120 +187,158 @@ const PointOfSale = () => {
             const config = res.data || {};
 
             // DETECTAR TIPO DE PAPEL
-            // Verifica que tu base de datos devuelva 'carta' en el campo tipo_papel
             const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
 
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
+            
+            // Calculos simples de impuestos (ejemplo)
+            const subtotal = (totalPrint / 1.12).toFixed(2);
+            const iva = (totalPrint - subtotal).toFixed(2);
 
-            // ================= ESTILOS CARTA =================
+            // ================= ESTILOS CARTA (NUEVO DISEÑO "RECEIPT") =================
             const estilosCarta = `
-                @page { size: letter portrait; margin: 1.5cm; }
-                body { font-family: 'Times New Roman', Times, serif; color: #333; margin: 0; padding: 0; }
-                .header-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
-                .logo-img { max-width: 150px; max-height: 100px; }
-                .titulo-factura { text-align: right; }
-                .titulo-factura h1 { font-size: 36px; margin: 0; letter-spacing: 2px; }
-                .info-grid { display: flex; justify-content: space-between; margin-bottom: 30px; }
-                .columna-info { width: 45%; }
-                .columna-info h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; }
-                .columna-info p { margin: 2px 0; font-size: 14px; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-family: sans-serif; }
-                th { background-color: #f0f0f0; padding: 10px; text-align: left; border-bottom: 2px solid #000; font-size: 12px; text-transform: uppercase; }
-                td { padding: 10px; border-bottom: 1px solid #ddd; font-size: 13px; }
-                .text-right { text-align: right; }
-                .text-center { text-align: center; }
-                .footer-container { margin-top: 50px; border-top: 1px solid #000; padding-top: 20px; display: flex; justify-content: space-between; }
-                .banco-info { font-size: 12px; color: #555; }
-                .firma-box { text-align: right; }
-                .firma-linea { margin-top: 40px; border-top: 1px solid #000; width: 200px; display: inline-block; }
-                .redes-sociales { margin-top: 20px; font-weight: bold; font-size: 13px; }
-                .qr-container { text-align: center; margin-top: 20px; }
+                @page { size: letter portrait; margin: 1cm; }
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
+                
+                /* Header Layout */
+                .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+                .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; font-weight: bold; overflow: hidden; }
+                .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
+                
+                .title-receipt { font-family: 'Brush Script MT', 'Segoe Script', cursive; font-size: 60px; color: #000; margin: 0; line-height: 1; text-align: right; }
+                
+                .business-name { text-align: center; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; margin: 10px 0 40px 0; font-weight: 400; }
+                
+                /* Info Bar */
+                .info-bar { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; font-weight: bold; }
+                
+                /* Tabla con bordes negros definidos */
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 2px solid #000; }
+                th { border: 1px solid #000; padding: 12px; text-align: center; background: #fff; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+                td { border: 1px solid #000; padding: 12px; font-size: 14px; vertical-align: middle; }
+                .col-desc { text-align: left; }
+                .col-center { text-align: center; }
+                .col-right { text-align: right; }
+
+                /* Sección Baja */
+                .bottom-section { display: flex; justify-content: space-between; margin-top: 10px; }
+                .payment-method { width: 40%; font-size: 12px; }
+                .totals-box { width: 40%; }
+                
+                .total-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #ccc; font-size: 14px; }
+                .total-row.final { border-bottom: none; border-top: 2px solid #000; font-weight: bold; font-size: 18px; margin-top: 5px; padding-top: 10px; }
+
+                /* Footer Creativo */
+                .footer { margin-top: 50px; display: flex; justify-content: space-between; align-items: flex-end; }
+                
+                .stamp-container { text-align: center; }
+                .stamp { 
+                    width: 100px; height: 100px; background: #333; color: #fff; 
+                    border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+                    font-family: 'Brush Script MT', cursive; font-size: 30px; transform: rotate(-10deg);
+                    box-shadow: 0 0 0 5px #fff, 0 0 0 7px #333;
+                }
+                
+                .socials { text-align: right; font-size: 12px; line-height: 2; }
+                .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+                .website { text-align: center; margin-top: 40px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
             `;
 
-            // ================= HTML CARTA =================
+            // ================= HTML CARTA (NUEVO DISEÑO) =================
             const contenidoCarta = `
-                <div class="header-container">
-                    <div>
-                        ${config.logo_url ? `<img src="${config.logo_url}" class="logo-img" />` : `<h1>${config.nombre_empresa}</h1>`}
+                <div class="header">
+                    <div class="logo-circle">
+                        ${config.logo_url ? `<img src="${config.logo_url}" />` : `<span>TU<br>LOGO<br>AQUÍ</span>`}
                     </div>
-                    <div class="titulo-factura">
-                        <h1>FACTURA</h1>
-                        <p><strong>Nº Orden:</strong> #${ticketId}</p>
-                        <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-GT')}</p>
+                    <div>
+                        <h1 class="title-receipt">Recibo</h1>
                     </div>
                 </div>
 
-                <div class="info-grid">
-                    <div class="columna-info">
-                        <h3>Emisor</h3>
-                        <p><strong>${config.nombre_empresa || "POTTER'S STORE"}</strong></p>
-                        <p>${config.direccion || "Dirección de la empresa"}</p>
-                        <p>Tel/WhatsApp: ${config.whatsapp || ""}</p>
-                    </div>
-                    <div class="columna-info">
-                        <h3>Cliente</h3>
-                        <p><strong>Consumidor Final</strong></p>
-                        <p>Ciudad</p>
-                        <p>NIT: C/F</p>
-                    </div>
+                <div class="business-name">
+                    ${config.nombre_empresa || "NOMBRE DE TU NEGOCIO"}
+                </div>
+
+                <div class="info-bar">
+                    <span>Nº Orden: ${ticketId}</span>
+                    <span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span>
                 </div>
 
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 50%">Descripción</th>
-                            <th class="text-center" style="width: 10%">Cant.</th>
-                            <th class="text-right" style="width: 20%">Precio Unit.</th>
-                            <th class="text-right" style="width: 20%">Total</th>
+                            <th style="width: 50%">Descripción del Artículo</th>
+                            <th style="width: 10%">Cant.</th>
+                            <th style="width: 20%">Precio Unit.</th>
+                            <th style="width: 20%">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${cartToPrint.map(item => `
                             <tr>
-                                <td>
-                                    <strong>${item.nombre}</strong>
-                                    <br/><span style="font-size:11px; color:#666;">${item.marca || ''} ${item.talla || ''}</span>
-                                </td>
-                                <td class="text-center">${item.qty}</td>
-                                <td class="text-right">Q${Number(item.precio_venta).toFixed(2)}</td>
-                                <td class="text-right"><strong>Q${(item.precio_venta * item.qty).toFixed(2)}</strong></td>
+                                <td class="col-desc">${item.nombre}</td>
+                                <td class="col-center">${item.qty}</td>
+                                <td class="col-center">Q${Number(item.precio_venta).toFixed(2)}</td>
+                                <td class="col-right">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
                             </tr>
                         `).join('')}
+                        <tr><td style="height: 30px;"></td><td></td><td></td><td></td></tr>
+                        <tr><td style="height: 30px;"></td><td></td><td></td><td></td></tr>
                     </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="3" class="text-right" style="padding-top: 20px; font-size: 16px;"><strong>TOTAL A PAGAR:</strong></td>
-                            <td class="text-right" style="padding-top: 20px; font-size: 16px;"><strong>Q${totalPrint.toFixed(2)}</strong></td>
-                        </tr>
-                    </tfoot>
                 </table>
 
-                <div class="footer-container">
-                    <div class="banco-info">
-                        <strong>INFORMACIÓN DE PAGO</strong><br/>
-                        Banco Industrial<br/>
-                        A nombre de: ${config.nombre_empresa}<br/>
-                        No. Cuenta: 123-456-7890 (Monetaria)
+                <div class="bottom-section">
+                    <div class="payment-method">
+                        <strong>MÉTODO DE PAGO:</strong><br/>
+                        Efectivo / Tarjeta<br/><br/>
+                        <strong>CLIENTE:</strong><br/>
+                        Consumidor Final
                     </div>
-                    <div class="firma-box">
-                        <div class="firma-linea"></div>
-                        <p>Firma / Sello</p>
-                        <div class="redes-sociales">
-                             📷 Instagram: @${config.nombre_empresa || 'potters_store'}<br/>
-                             📘 Facebook: Potter's Store
+
+                    <div class="totals-box">
+                        <div class="total-row">
+                            <span>SUBTOTAL</span>
+                            <span>Q${subtotal}</span>
+                        </div>
+                        <div class="total-row">
+                            <span>IMPUESTOS (Est.)</span>
+                            <span>Q${iva}</span>
+                        </div>
+                        <div class="total-row final">
+                            <span>TOTAL</span>
+                            <span>Q${totalPrint.toFixed(2)}</span>
                         </div>
                     </div>
                 </div>
-                <div class="center" style="margin-top: 30px; font-style: italic; text-align: center;">
-                    ¡Muchas gracias por su compra!
+
+                <div class="footer">
+                    <div class="stamp-container">
+                        <div class="stamp">
+                            ¡Gracias!
+                        </div>
+                    </div>
+                    
+                    <div class="socials">
+                        <div class="social-item">
+                            <span>@${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toLowerCase() : 'tunegocio'}</span>
+                            <span>📷</span> 
+                        </div>
+                        <div class="social-item">
+                            <span>@${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toLowerCase() : 'tunegocio'}</span>
+                            <span>📘</span>
+                        </div>
+                    </div>
                 </div>
-                 ${config.instagram_url ? '<div class="qr-container"><div id="qr-code"></div></div>' : ''}
+
+                <div class="website">
+                    WWW.${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toUpperCase() : 'TUSITIO'}.COM
+                </div>
             `;
 
-            // ================= ESTILOS 80MM (Térmico) =================
+            // ================= ESTILOS 80MM (Térmico - Sin Cambios) =================
             const estilos80mm = `
                 @page { size: 80mm auto; margin: 0; }
                 body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
@@ -332,7 +352,6 @@ const PointOfSale = () => {
                 .qr-box { display: flex; justify-content: center; margin-top: 10px; }
             `;
 
-            // ================= HTML 80MM (Térmico) =================
             const contenido80mm = `
                 <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
                 <div class="center">Comprobante de Compra</div>
@@ -398,7 +417,6 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // Renderizado del QR (si aplica)
             if (config.instagram_url) {
                 printWindow.onload = () => {
                     const container = printWindow.document.getElementById('qr-code');
@@ -450,7 +468,7 @@ const PointOfSale = () => {
 
             <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden', pb: 1 }}>
                 
-                {/* 🟢 COLUMNA IZQUIERDA: Escáner y Lista Resumen */}
+                {/* COLUMNA IZQUIERDA */}
                 <Paper elevation={3} sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <TextField
                         inputRef={inputRef}
@@ -463,16 +481,13 @@ const PointOfSale = () => {
                     {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
                     {successMsg && <Alert severity="success" sx={{ mb: 1 }}>{successMsg}</Alert>}
                     
-                    {/* Lista rápida visual (Sólo lectura) */}
                     <Box sx={{ mt: 1, flexGrow: 1, overflowY: 'auto', pr: 1 }}>
                         {cart.slice().reverse().map((item, index) => (
                             <Box key={index} sx={{ p: 1, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Avatar src={item.imagen_url} variant="rounded" sx={{ width: 40, height: 40 }}>{item.nombre.charAt(0)}</Avatar>
                                 <Box sx={{ flexGrow: 1 }}>
                                     <Typography fontWeight="bold" color="green">{item.nombre}</Typography>
-                                    <Typography variant="caption" display="block">
-                                        {item.qty} x Q{item.precio_venta}
-                                    </Typography>
+                                    <Typography variant="caption" display="block">{item.qty} x Q{item.precio_venta}</Typography>
                                 </Box>
                                 <Typography fontWeight="bold">{formatCurrency(item.precio_venta * item.qty)}</Typography>
                             </Box>
@@ -480,7 +495,7 @@ const PointOfSale = () => {
                     </Box>
                 </Paper>
 
-                {/* 🔵 COLUMNA DERECHA: Tabla Editable */}
+                {/* COLUMNA DERECHA */}
                 <Paper elevation={3} sx={{ p: 2, width: '55%', minWidth: '550px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', overflow: 'hidden' }}>
                     <Typography variant="h6" sx={{ borderBottom: '1px solid #ccc', pb: 1, flexShrink: 0 }}>Detalle de Venta</Typography>
 
@@ -507,21 +522,13 @@ const PointOfSale = () => {
                                                 </Box>
                                             </Box>
                                         </TableCell>
-                                        
-                                        {/* CANTIDAD EDITABLE (+/-) */}
                                         <TableCell align="center">
                                             <Box display="flex" alignItems="center" justifyContent="center">
-                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty - 1, item.cantidad)} color="primary">
-                                                    <RemoveCircleOutline />
-                                                </IconButton>
+                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty - 1, item.cantidad)} color="primary"><RemoveCircleOutline /></IconButton>
                                                 <Typography sx={{ mx: 1, fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.qty}</Typography>
-                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty + 1, item.cantidad)} color="primary">
-                                                    <AddCircleOutline />
-                                                </IconButton>
+                                                <IconButton size="small" onClick={() => updateQuantity(item.id, item.qty + 1, item.cantidad)} color="primary"><AddCircleOutline /></IconButton>
                                             </Box>
                                         </TableCell>
-
-                                        {/* PRECIO EDITABLE */}
                                         <TableCell align="center">
                                             <TextField 
                                                 type="number" variant="standard"
@@ -536,16 +543,10 @@ const PointOfSale = () => {
                                                 onClick={(e) => e.target.select()}
                                             />
                                         </TableCell>
-
-                                        <TableCell align="right">
-                                            {formatCurrency(item.precio_venta * item.qty)}
-                                        </TableCell>
-
+                                        <TableCell align="right">{formatCurrency(item.precio_venta * item.qty)}</TableCell>
                                         <TableCell>
                                             <Tooltip title="Eliminar del carrito">
-                                                <IconButton size="small" color="error" onClick={() => removeFromCart(item.id)}>
-                                                    <Delete />
-                                                </IconButton>
+                                                <IconButton size="small" color="error" onClick={() => removeFromCart(item.id)}><Delete /></IconButton>
                                             </Tooltip>
                                         </TableCell>
                                     </TableRow>
@@ -562,14 +563,12 @@ const PointOfSale = () => {
                         </Table>
                     </TableContainer>
 
-                    {/* TOTALES Y ACCIONES */}
                     <Box sx={{ mt: 'auto', pt: 2, borderTop: '2px dashed #ccc', flexShrink: 0 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, px: 2 }}>
                             <Typography variant="h4" fontWeight="bold">TOTAL:</Typography>
                             <Typography variant="h4" fontWeight="bold" color="primary">{formatCurrency(total)}</Typography>
                         </Box>
                         
-                        {/* Botón COBRAR */}
                         <Button 
                             variant="contained" color="success" fullWidth size="large" 
                             onClick={handleCheckout} disabled={loading || cart.length === 0} 
@@ -578,7 +577,6 @@ const PointOfSale = () => {
                             {loading ? <CircularProgress size={28} color="inherit"/> : 'COBRAR (F9)'}
                         </Button>
 
-                        {/* 🟢 Botón CANCELAR VENTA */}
                         <Button 
                             variant="outlined" color="error" fullWidth 
                             onClick={handleCancelSale} disabled={cart.length === 0}
