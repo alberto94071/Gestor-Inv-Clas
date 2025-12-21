@@ -17,6 +17,12 @@ import { createRoot } from 'react-dom/client';
 // Helper moneda
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
+// URLs de iconos para redes sociales (usamos CDN públicas para fiabilidad)
+const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
+const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
+const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
+
+
 const PointOfSale = () => {
     // --- ESTADOS ---
     const [inventory, setInventory] = useState([]);
@@ -194,28 +200,18 @@ const PointOfSale = () => {
 
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
             
-            // Calculos simples de impuestos (ejemplo)
-            const subtotal = (totalPrint / 1.12).toFixed(2);
-            const iva = (totalPrint - subtotal).toFixed(2);
-
-            // ================= ESTILOS CARTA (NUEVO DISEÑO "RECEIPT") =================
+            // ================= ESTILOS CARTA (NUEVO DISEÑO "RECEIPT" MEJORADO) =================
             const estilosCarta = `
-                @page { size: letter portrait; margin: 1cm; }
+                @page { size: letter portrait; margin: 0.8cm; }
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
                 
-                /* Header Layout */
                 .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-                .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; font-weight: bold; overflow: hidden; }
+                .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
                 .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
-                
                 .title-receipt { font-family: 'Brush Script MT', 'Segoe Script', cursive; font-size: 60px; color: #000; margin: 0; line-height: 1; text-align: right; }
-                
-                .business-name { text-align: center; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; margin: 10px 0 40px 0; font-weight: 400; }
-                
-                /* Info Bar */
+                .business-name { text-align: center; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; margin: 10px 0 30px 0; font-weight: 400; }
                 .info-bar { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; font-weight: bold; }
                 
-                /* Tabla con bordes negros definidos */
                 table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 2px solid #000; }
                 th { border: 1px solid #000; padding: 12px; text-align: center; background: #fff; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
                 td { border: 1px solid #000; padding: 12px; font-size: 14px; vertical-align: middle; }
@@ -223,35 +219,40 @@ const PointOfSale = () => {
                 .col-center { text-align: center; }
                 .col-right { text-align: right; }
 
-                /* Sección Baja */
-                .bottom-section { display: flex; justify-content: space-between; margin-top: 10px; }
-                .payment-method { width: 40%; font-size: 12px; }
+                .bottom-section { display: flex; justify-content: flex-end; margin-top: 10px; }
                 .totals-box { width: 40%; }
-                
-                .total-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #ccc; font-size: 14px; }
-                .total-row.final { border-bottom: none; border-top: 2px solid #000; font-weight: bold; font-size: 18px; margin-top: 5px; padding-top: 10px; }
+                .total-row.final { display: flex; justify-content: space-between; border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 20px; margin-top: 5px; padding: 10px 0; }
 
-                /* Footer Creativo */
-                .footer { margin-top: 50px; display: flex; justify-content: space-between; align-items: flex-end; }
+                /* Footer Creativo Aumentado */
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
                 
+                /* Círculo "Gracias" más grande */
                 .stamp-container { text-align: center; }
                 .stamp { 
-                    width: 100px; height: 100px; background: #333; color: #fff; 
+                    width: 150px; height: 150px; /* Aumentado */
+                    background: #333; color: #fff; 
                     border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-                    font-family: 'Brush Script MT', cursive; font-size: 30px; transform: rotate(-10deg);
-                    box-shadow: 0 0 0 5px #fff, 0 0 0 7px #333;
+                    font-family: 'Brush Script MT', cursive; 
+                    font-size: 40px; /* Aumentado */
+                    transform: rotate(-10deg);
+                    box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333;
                 }
                 
-                .socials { text-align: right; font-size: 12px; line-height: 2; }
-                .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-                .website { text-align: center; margin-top: 40px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+                /* Redes Sociales Aumentadas */
+                .socials { text-align: right; font-size: 18px; /* Aumentado */ line-height: 2.5; }
+                .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
+                .social-icon { width: 28px; height: 28px; } /* Iconos reales */
+                .qr-container-inline { margin-left: 15px; border: 2px solid #333; padding: 5px; background: #fff; display: inline-block; vertical-align: middle; }
+
+                /* Mensaje Final Grande al Pie */
+                .footer-large-msg { margin-top: 50px; text-align: center; font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
             `;
 
             // ================= HTML CARTA (NUEVO DISEÑO) =================
             const contenidoCarta = `
                 <div class="header">
                     <div class="logo-circle">
-                        ${config.logo_url ? `<img src="${config.logo_url}" />` : `<span>TU<br>LOGO<br>AQUÍ</span>`}
+                        ${config.logo_url ? `<img src="${config.logo_url}" />` : `<span>LOGO</span>`}
                     </div>
                     <div>
                         <h1 class="title-receipt">Recibo</h1>
@@ -286,27 +287,11 @@ const PointOfSale = () => {
                             </tr>
                         `).join('')}
                         <tr><td style="height: 30px;"></td><td></td><td></td><td></td></tr>
-                        <tr><td style="height: 30px;"></td><td></td><td></td><td></td></tr>
                     </tbody>
                 </table>
 
                 <div class="bottom-section">
-                    <div class="payment-method">
-                        <strong>MÉTODO DE PAGO:</strong><br/>
-                        Efectivo / Tarjeta<br/><br/>
-                        <strong>CLIENTE:</strong><br/>
-                        Consumidor Final
-                    </div>
-
                     <div class="totals-box">
-                        <div class="total-row">
-                            <span>SUBTOTAL</span>
-                            <span>Q${subtotal}</span>
-                        </div>
-                        <div class="total-row">
-                            <span>IMPUESTOS (Est.)</span>
-                            <span>Q${iva}</span>
-                        </div>
                         <div class="total-row final">
                             <span>TOTAL</span>
                             <span>Q${totalPrint.toFixed(2)}</span>
@@ -316,29 +301,32 @@ const PointOfSale = () => {
 
                 <div class="footer">
                     <div class="stamp-container">
-                        <div class="stamp">
-                            ¡Gracias!
-                        </div>
+                        <div class="stamp">¡Gracias!</div>
                     </div>
                     
                     <div class="socials">
                         <div class="social-item">
-                            <span>@${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toLowerCase() : 'tunegocio'}</span>
-                            <span>📷</span> 
+                            <span>@potters_store</span>
+                            <img src="${ICON_TIKTOK}" class="social-icon" alt="TikTok"/>
                         </div>
                         <div class="social-item">
-                            <span>@${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toLowerCase() : 'tunegocio'}</span>
-                            <span>📘</span>
+                            <span>Potter's store</span>
+                            <img src="${ICON_FB}" class="social-icon" alt="Facebook"/>
+                        </div>
+                        <div class="social-item">
+                             <div id="qr-code-inline" class="qr-container-inline"></div>
+                            <span>@potters_store_</span>
+                            <img src="${ICON_IG}" class="social-icon" alt="Instagram"/>
                         </div>
                     </div>
                 </div>
 
-                <div class="website">
-                    WWW.${config.nombre_empresa ? config.nombre_empresa.replace(/\s+/g, '').toUpperCase() : 'TUSITIO'}.COM
-                </div>
+                <div class="footer-large-msg">
+                    ${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}
+                 </div>
             `;
 
-            // ================= ESTILOS 80MM (Térmico - Sin Cambios) =================
+            // ================= ESTILOS 80MM (Térmico) =================
             const estilos80mm = `
                 @page { size: 80mm auto; margin: 0; }
                 body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
@@ -348,10 +336,12 @@ const PointOfSale = () => {
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
                 th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
                 td { vertical-align: top; font-size: 11px; padding: 4px 0; }
-                .footer { margin-top: 15px; font-size: 10px; text-align: center; }
-                .qr-box { display: flex; justify-content: center; margin-top: 10px; }
+                .footer-contact { margin-top: 15px; font-size: 10px; text-align: center; }
+                /* Estilo para mensaje final grande en 80mm */
+                .footer-large-msg-80 { margin-top: 20px; text-align: center; font-size: 16px; font-weight: bold; text-transform: uppercase; }
             `;
 
+            // ================= HTML 80MM (Térmico) =================
             const contenido80mm = `
                 <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
                 <div class="center">Comprobante de Compra</div>
@@ -390,12 +380,13 @@ const PointOfSale = () => {
                 </div>
                 <div class="dashed-bottom" style="margin-top: 5px;"></div>
 
-                <div class="footer">
-                    ${config.mensaje_final || "¡Gracias por su compra!"}<br/>
+                <div class="footer-contact">
                     ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
-                    ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}<br/>
-                    ${config.instagram_url ? `IG: @${config.nombre_empresa}` : ''}
-                    ${config.instagram_url ? '<div class="qr-box"><div id="qr-code"></div></div>' : ''}
+                    ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}
+                </div>
+
+                <div class="footer-large-msg-80">
+                    ${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}
                 </div>
             `;
 
@@ -417,16 +408,20 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
-            if (config.instagram_url) {
+            // Renderizado del QR (Solo si es CARTA y hay URL de Instagram)
+            if (esCarta && config.instagram_url) {
                 printWindow.onload = () => {
-                    const container = printWindow.document.getElementById('qr-code');
+                    // Buscamos el contenedor específico dentro de la sección de redes sociales
+                    const container = printWindow.document.getElementById('qr-code-inline');
                     if (container) {
                         const root = createRoot(container);
-                        root.render(<QRCode value={config.instagram_url} size={esCarta ? 100 : 80} />);
+                        // Tamaño del QR ajustado para que se vea bien junto al texto
+                        root.render(<QRCode value={config.instagram_url} size={70} />);
                     }
                     setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
                 };
             } else {
+                // Para 80mm o si no hay QR, imprimimos directo
                 setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 500);
             }
 
