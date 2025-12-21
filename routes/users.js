@@ -54,6 +54,8 @@ router.post('/register', authenticateToken, checkAdminRole, async (req, res) => 
 });
 
 // 3. ACTUALIZAR USUARIO (PUT /api/users/:id)
+// backend/routes/users.js
+
 router.put('/:id', authenticateToken, checkAdminRole, async (req, res) => {
     const { id } = req.params;
     const { nombre, email, password, rol } = req.body;
@@ -62,24 +64,30 @@ router.put('/:id', authenticateToken, checkAdminRole, async (req, res) => {
         let query;
         let params;
 
+        // Si se envió una contraseña (no está vacía), la encriptamos y actualizamos
         if (password && password.trim() !== "") {
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
+            
             query = 'UPDATE usuarios SET nombre=$1, email=$2, password=$3, rol=$4 WHERE id=$5';
             params = [nombre, email, hashedPassword, rol, id];
         } else {
+            // Si no se envió contraseña, actualizamos solo lo demás
             query = 'UPDATE usuarios SET nombre=$1, email=$2, rol=$3 WHERE id=$4';
             params = [nombre, email, rol, id];
         }
 
         const result = await db.query(query, params);
+
         if (result.rowCount === 0) {
-            return res.status(404).json({ error: "Usuario no encontrado" });
+            return res.status(404).json({ error: "Usuario no encontrado en la base de datos." });
         }
+
         return res.json({ message: "Usuario actualizado correctamente" });
+
     } catch (err) {
-        console.error("Error al actualizar usuario:", err);
-        return res.status(500).json({ error: "Error al intentar actualizar el usuario" });
+        console.error("Error al actualizar usuario:", err.message);
+        return res.status(500).json({ error: "Error interno del servidor", detalle: err.message });
     }
 });
 
