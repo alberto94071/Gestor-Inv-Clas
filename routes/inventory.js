@@ -1,8 +1,7 @@
 // backend/routes/inventory.js
 const express = require('express');
 const router = express.Router();
-// Asegúrate de que esta ruta apunte a tu archivo de conexión real. 
-// Si tu archivo está en backend/db.js, usa '../db'. Si está en backend/db/db.js, usa '../db/db'.
+// Asegúrate de que esta ruta apunte a tu archivo de conexión real.
 const db = require('../db/db'); 
 const authenticateToken = require('../middleware/auth');
 const checkAdminRole = require('../middleware/adminMiddleware');
@@ -11,7 +10,6 @@ const { generateUniqueBarcode } = require('../utils/barcodeGenerator');
 
 // =====================================================================
 // 1. REGISTRAR PRODUCTO (POST /products)
-// Stock inicial por defecto = 1 (si no se especifica otro)
 // =====================================================================
 router.post('/products', authenticateToken, logActivity('Creación de Producto', 'productos'), async (req, res) => {
     const { 
@@ -19,16 +17,13 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
         talla, color, codigo_barras, imagen_url, stock_inicial 
     } = req.body;
 
-    // Validación mínima
     if (!nombre || !precio_venta) {
         return res.status(400).json({ error: 'Nombre y Precio de Venta son obligatorios.' });
     }
 
-    // Limpieza de código y generación si falta
     const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
     const finalCode = codigoLimpio || generateUniqueBarcode();
 
-    // 🟢 LÓGICA DE STOCK INICIAL: Si viene vacío, asignamos 1 por defecto.
     let cantidadInicial = 1;
     if (stock_inicial !== undefined && stock_inicial !== '' && stock_inicial !== null) {
         const parsed = parseInt(stock_inicial);
@@ -38,7 +33,6 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
     try {
         await db.query('BEGIN');
 
-        // A. Insertar Producto en catálogo
         const productResult = await db.query(
             `INSERT INTO productos 
             (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url) 
@@ -47,7 +41,6 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
         );
         const newProductId = productResult.rows[0].id;
 
-        // B. Insertar en tabla INVENTARIO con la cantidad inicial (1 o la definida)
         await db.query(
             'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2)',
             [newProductId, cantidadInicial]
@@ -73,7 +66,6 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
 
 // =====================================================================
 // 2. CONSULTAR INVENTARIO (GET /inventory)
-// Devuelve productos con su stock e imagen
 // =====================================================================
 router.get('/inventory', authenticateToken, async (req, res) => {
     try {
@@ -84,8 +76,7 @@ router.get('/inventory', authenticateToken, async (req, res) => {
                 COALESCE(i.cantidad, 0) as cantidad
             FROM productos p
             LEFT JOIN inventario i ON p.id = i.producto_id
-            ORDER BY 
-                p.id DESC; -- Muestra los más recientes primero
+            ORDER BY p.id DESC; 
         `;
         const result = await db.query(query);
         res.json(result.rows);
@@ -97,7 +88,6 @@ router.get('/inventory', authenticateToken, async (req, res) => {
 
 // =====================================================================
 // 3. EDITAR PRODUCTO (PUT /products/:id)
-// Permite modificar datos y foto
 // =====================================================================
 router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edición de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
@@ -122,7 +112,6 @@ router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edic
 
 // =====================================================================
 // 4. SUMAR STOCK (POST /add-stock)
-// Ingreso de mercadería (InventoryDashboard)
 // =====================================================================
 router.post('/add-stock', authenticateToken, async (req, res) => {
     const { producto_id, cantidad } = req.body;
@@ -130,18 +119,15 @@ router.post('/add-stock', authenticateToken, async (req, res) => {
     if (!producto_id || !cantidad) return res.status(400).json({ error: "Datos insuficientes" });
 
     try {
-        // Verificar si existe registro en inventario
         const check = await db.query('SELECT * FROM inventario WHERE producto_id = $1', [producto_id]);
 
         let result;
         if (check.rows.length > 0) {
-            // Actualizar
             result = await db.query(
                 'UPDATE inventario SET cantidad = cantidad + $1 WHERE producto_id = $2 RETURNING cantidad',
                 [cantidad, producto_id]
             );
         } else {
-            // Insertar si era huérfano
             result = await db.query(
                 'INSERT INTO inventario (producto_id, cantidad) VALUES ($1, $2) RETURNING cantidad',
                 [producto_id, cantidad]
@@ -156,11 +142,9 @@ router.post('/add-stock', authenticateToken, async (req, res) => {
 });
 
 // =====================================================================
-// 5. REGISTRAR VENTA (POST /scan-out) - PUNTO DE VENTA
-// Permite precio modificado (descuento)
+// 5. REGISTRAR VENTA (POST /scan-out)
 // =====================================================================
 router.post('/scan-out', authenticateToken, async (req, res) => {
-    // Recibimos 'precio_venta' opcional (si el usuario lo cambió en el POS)
     const { codigo_barras, cantidad = 1, precio_venta } = req.body;
     const userId = req.user ? req.user.userId : null; 
     const codigoLimpio = codigo_barras ? codigo_barras.trim() : '';
@@ -168,7 +152,6 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
     try {
         await db.query('BEGIN');
 
-        // 1. Verificar stock y precio base
         const checkQuery = `
             SELECT i.producto_id, i.cantidad, p.precio_venta as precio_base, p.nombre 
             FROM inventario i
@@ -189,16 +172,13 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `Stock insuficiente de ${nombre}. Disponible: ${stockActual}` });
         }
 
-        // 2. Determinar precio final (El del POS o el Base)
         const precioFinal = precio_venta ? parseFloat(precio_venta) : parseFloat(precio_base);
 
-        // 3. Restar inventario
         const update = await db.query(
             'UPDATE inventario SET cantidad = cantidad - $1 WHERE producto_id = $2 RETURNING cantidad',
             [cantidad, producto_id]
         );
 
-        // 4. Guardar historial con el precio real de venta
         if (userId) {
             const totalVenta = precioFinal * cantidad;
             await db.query(
@@ -219,7 +199,6 @@ router.post('/scan-out', authenticateToken, async (req, res) => {
 
 // =====================================================================
 // 6. ELIMINAR PRODUCTO (DELETE /products/:id)
-// Solo Admin
 // =====================================================================
 router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('Eliminación de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
@@ -250,10 +229,10 @@ router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('E
 });
 
 // =====================================================================
-// 7. REPORTES Y CONFIGURACIÓN (NUEVAS FUNCIONES)
+// 7. REPORTES Y CONFIGURACIÓN
 // =====================================================================
 
-// A. REPORTE: Productos Estancados (Creados hace >3 meses, sin ventas en >3 meses, con stock)
+// A. REPORTE: Productos Estancados
 router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, res) => {
     try {
         const query = `
@@ -278,11 +257,9 @@ router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, r
 // B. CONFIGURACIÓN TICKET: Obtener datos
 router.get('/config/ticket', authenticateToken, async (req, res) => {
     try {
-        // Asumimos que existe una tabla 'configuracion'. Si no, devuelve objeto vacío
         const result = await db.query('SELECT * FROM configuracion LIMIT 1');
         res.json(result.rows[0] || {});
     } catch (error) {
-        // Si falla (ej. tabla no existe aún), devolvemos vacío sin error 500 para no romper el front
         res.json({}); 
     }
 });
@@ -307,11 +284,11 @@ router.post('/config/ticket', authenticateToken, checkAdminRole, async (req, res
         res.json({ message: 'Configuración guardada' });
     } catch (error) { 
         console.error(error);
-        res.status(500).json({ error: 'Error guardando configuración. Asegúrate de haber creado la tabla configuracion en la BD.' }); 
+        res.status(500).json({ error: 'Error guardando configuración.' }); 
     }
 });
 
-// D. LIMPIEZA AUTOMÁTICA: Borrar ventas de hace más de 1 mes
+// D. LIMPIEZA AUTOMÁTICA
 router.delete('/sales/cleanup', authenticateToken, checkAdminRole, async (req, res) => {
     try {
         await db.query("DELETE FROM historial_ventas WHERE fecha_venta < NOW() - INTERVAL '1 month'");
@@ -319,6 +296,39 @@ router.delete('/sales/cleanup', authenticateToken, checkAdminRole, async (req, r
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error en limpieza automática' });
+    }
+});
+
+// =====================================================================
+// 8. HISTORIAL DE VENTAS (NUEVA RUTA) 🟢
+// =====================================================================
+router.get('/sales-history', authenticateToken, async (req, res) => {
+    try {
+        // Adaptamos la consulta a los nombres reales de tus tablas:
+        // Tabla ventas: 'historial_ventas' (alias h)
+        // Tabla productos: 'productos' (alias p)
+        const query = `
+            SELECT 
+                h.id,
+                h.fecha_venta as fecha_hora, 
+                h.cantidad,
+                h.precio_unitario,
+                h.total_venta as totalVenta,
+                p.nombre as producto,
+                p.codigo_barras as codigo,
+                u.username as vendedor
+            FROM historial_ventas h
+            JOIN productos p ON h.producto_id = p.id
+            LEFT JOIN users u ON h.user_id = u.id
+            ORDER BY h.fecha_venta DESC
+        `;
+        
+        const result = await db.query(query);
+        res.json(result.rows);
+
+    } catch (err) {
+        console.error("Error al obtener historial:", err);
+        res.status(500).json({ error: "Error del servidor al cargar historial" });
     }
 });
 
