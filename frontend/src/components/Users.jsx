@@ -23,16 +23,16 @@ const Users = () => {
         rol: 'cajero'
     });
 
-    // 🟢 Cambiado de /users a /usuarios para coincidir con tu base de datos
+    // 🟢 Regresamos a /users porque el servidor da 404 con /usuarios
     const fetchUsers = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            const res = await API.get('/usuarios', { 
+            const res = await API.get('/users', { 
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(res.data);
         } catch (err) {
-            showToast("Error al cargar la lista de usuarios", "error");
+            showToast("Error al cargar la lista", "error");
         } finally {
             setLoading(false);
         }
@@ -65,43 +65,43 @@ const Users = () => {
             return;
         }
         if (!validateEmail(formData.email)) {
-            showToast("El correo no tiene un formato válido", "error");
+            showToast("Email inválido", "error");
             return;
         }
 
         try {
             const token = localStorage.getItem('authToken');
             if (selectedUser) {
-                // ACTUALIZAR (Ruta corregida a /usuarios)
-                await API.put(`/usuarios/${selectedUser.id}`, formData, {
+                // EDITAR (Ruta /users)
+                await API.put(`/users/${selectedUser.id}`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                showToast("Cambios guardados");
+                showToast("Usuario actualizado");
             } else {
-                // REGISTRAR (Ruta corregida a /usuarios)
-                await API.post('/usuarios/register', formData, {
+                // REGISTRAR (Ruta /users/register)
+                await API.post('/users/register', formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                showToast("Usuario registrado exitosamente");
+                showToast("Usuario creado");
             }
             setOpenModal(false);
             fetchUsers();
         } catch (err) {
-            showToast(err.response?.data?.error || "Error al procesar la solicitud", "error");
+            showToast(err.response?.data?.error || "Error en el servidor", "error");
         }
     };
 
     const handleDelete = async () => {
         try {
             const token = localStorage.getItem('authToken');
-            await API.delete(`/usuarios/${selectedUser.id}`, {
+            await API.delete(`/users/${selectedUser.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            showToast("Usuario eliminado correctamente");
+            showToast("Usuario eliminado");
             setOpenDelete(false);
             fetchUsers();
         } catch (err) {
-            showToast("Error al intentar eliminar", "error");
+            showToast("Error al eliminar", "error");
         }
     };
 
@@ -156,7 +156,7 @@ const Users = () => {
                 </Table>
             </TableContainer>
 
-            {/* MODAL FORMULARIO */}
+            {/* MODALES IGUAL QUE ANTES PERO CON RUTAS /USERS */}
             <Dialog open={openModal} onClose={() => setOpenModal(false)} fullWidth maxWidth="xs">
                 <DialogTitle sx={{ fontWeight: 'bold' }}>{selectedUser ? 'Modificar Datos' : 'Nuevo Registro'}</DialogTitle>
                 <DialogContent>
@@ -164,11 +164,11 @@ const Users = () => {
                         <TextField label="Nombre Completo" fullWidth value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} />
                         <TextField label="Correo" fullWidth value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
                         <TextField 
-                            label={selectedUser ? "Cambiar Contraseña (opcional)" : "Contraseña"} 
+                            label={selectedUser ? "Contraseña (dejar vacío si no cambia)" : "Contraseña"} 
                             type="password" fullWidth value={formData.password} 
                             onChange={(e) => setFormData({...formData, password: e.target.value})} 
                         />
-                        <TextField select label="Rol en el sistema" value={formData.rol} onChange={(e) => setFormData({...formData, rol: e.target.value})}>
+                        <TextField select label="Rol" value={formData.rol} onChange={(e) => setFormData({...formData, rol: e.target.value})}>
                             <MenuItem value="cajero">Cajero</MenuItem>
                             <MenuItem value="admin">Administrador</MenuItem>
                         </TextField>
@@ -176,16 +176,15 @@ const Users = () => {
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
                     <Button onClick={() => setOpenModal(false)} color="inherit">Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Guardar Usuario</Button>
+                    <Button onClick={handleSave} variant="contained" startIcon={<Save />}>Guardar</Button>
                 </DialogActions>
             </Dialog>
 
-            {/* CONFIRMAR BORRADO */}
             <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
-                <DialogTitle>¿Eliminar acceso?</DialogTitle>
-                <DialogContent>¿Estás seguro de quitar el acceso a <strong>{selectedUser?.nombre}</strong>?</DialogContent>
+                <DialogTitle>¿Eliminar?</DialogTitle>
+                <DialogContent>¿Quitar acceso a <strong>{selectedUser?.nombre}</strong>?</DialogContent>
                 <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={() => setOpenDelete(false)}>No, volver</Button>
+                    <Button onClick={() => setOpenDelete(false)}>No</Button>
                     <Button onClick={handleDelete} variant="contained" color="error">Sí, eliminar</Button>
                 </DialogActions>
             </Dialog>
