@@ -10,7 +10,7 @@ import {
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
-// --- CONFIGURACIÓN DE ICONOS (Imágenes directas para impresión segura) ---
+// --- CONFIGURACIÓN DE ICONOS PARA IMPRESIÓN ---
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
@@ -24,7 +24,6 @@ const Row = ({ row, onReprint }) => {
 
     return (
         <>
-            {/* Fila Principal (Resumen de Venta) */}
             <TableRow sx={{ '& > *': { borderBottom: 'unset' }, backgroundColor: open ? '#f8f9fa' : 'inherit' }}>
                 <TableCell>
                     <IconButton size="small" onClick={() => setOpen(!open)}>
@@ -64,13 +63,12 @@ const Row = ({ row, onReprint }) => {
                 </TableCell>
             </TableRow>
 
-            {/* Fila Desplegable (Detalle de Productos) */}
             <TableRow>
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
                     <Collapse in={open} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2, padding: 2, backgroundColor: '#fff', borderRadius: 2, boxShadow: 1 }}>
                             <Typography variant="subtitle2" gutterBottom component="div" sx={{fontWeight:'bold', color: '#555'}}>
-                                📦 Detalle de Artículos Vendidos
+                                📦 Detalle de Artículos
                             </Typography>
                             <Table size="small" aria-label="purchases">
                                 <TableHead>
@@ -106,7 +104,7 @@ const Row = ({ row, onReprint }) => {
     );
 };
 
-// --- COMPONENTE PRINCIPAL ---
+// --- COMPONENTE PRINCIPAL (Renombrado a Reports) ---
 const Reports = () => {
     const [salesData, setSalesData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -118,11 +116,11 @@ const Reports = () => {
             setLoading(true);
             try {
                 const token = localStorage.getItem('authToken');
+                // Llama a la ruta corregida del backend
                 const response = await API.get('/inventory/sales-history', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 
-                // Agrupar datos (Backend a veces manda lista plana)
                 const grouped = groupSalesData(response.data);
                 setSalesData(grouped);
 
@@ -141,7 +139,7 @@ const Reports = () => {
     const groupSalesData = (flatItems) => {
         const groups = {};
         flatItems.forEach(item => {
-            // Clave única por venta
+            // Generamos una clave única. Si no hay ticket_id, usamos fecha+vendedor
             const key = item.ticket_id || `${item.fecha_hora}_${item.vendedor}`;
             
             if (!groups[key]) {
@@ -166,7 +164,7 @@ const Reports = () => {
         return Object.values(groups).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     };
 
-    // --- FUNCIÓN DE RE-IMPRESIÓN (Igualada al POS) ---
+    // --- FUNCIÓN DE RE-IMPRESIÓN (DISEÑO ACTUALIZADO) ---
     const handleReprint = async (saleRow) => {
         try {
             const token = localStorage.getItem('authToken');
@@ -177,22 +175,22 @@ const Reports = () => {
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
-            // Mapeamos los datos del historial al formato de impresión
             const cartToPrint = saleRow.items.map(i => ({
                 nombre: i.producto,
                 qty: i.cantidad,
                 precio_venta: i.precioUnitario
             }));
 
+            // Usamos la fecha original de la venta
             const ticketId = saleRow.id.toString().substring(0, 15);
             const totalPrint = saleRow.totalVenta;
 
-             // QR como imagen directa (Más estable para imprimir)
+             // QR como imagen directa
             const qrUrl = config.instagram_url 
             ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
             : '';
 
-            // --- ESTILOS (Optimizados para imprimir fondo negro) ---
+            // --- ESTILOS CARTA (Con círculo negro y redes sociales corregidas) ---
             const estilosCarta = `
                 @page { size: letter portrait; margin: 0.8cm; }
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -214,18 +212,16 @@ const Reports = () => {
                 
                 .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
                 
-                /* Estilo del sello corregido para que salga negro al imprimir */
+                /* Sello corregido para salir negro */
                 .stamp-container { text-align: center; }
                 .stamp { 
                     width: 150px; height: 150px; 
-                    background-color: #333 !important; 
-                    color: #fff !important; 
+                    background-color: #333 !important; color: #fff !important; 
                     border-radius: 50%; display: flex; align-items: center; justify-content: center; 
                     font-family: 'Brush Script MT', cursive; font-size: 40px; 
                     transform: rotate(-10deg); 
                     box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333; 
-                    -webkit-print-color-adjust: exact; 
-                    print-color-adjust: exact; 
+                    -webkit-print-color-adjust: exact; print-color-adjust: exact; 
                 }
                 
                 .socials { text-align: right; font-size: 18px; line-height: 2.5; }
@@ -348,7 +344,6 @@ const Reports = () => {
             printWindow.document.write(html);
             printWindow.document.close();
             
-            // Damos 1 segundo para cargar imagenes antes de imprimir
             setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 1000);
 
         } catch (e) {
