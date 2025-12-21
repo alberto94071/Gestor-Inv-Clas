@@ -147,67 +147,53 @@ const Reports = () => {
 
     // --- ALGORITMO INTELIGENTE DE AGRUPACIÓN ---
     // Agrupa por "Proximidad de Tiempo" en lugar de minutos exactos.
-    const processSalesSmartly = (flatItems) => {
-        if (!flatItems || flatItems.length === 0) return [];
+    // --- ALGORITMO INTELIGENTE DE AGRUPACIÓN ---
+const processSalesSmartly = (flatItems) => {
+    if (!flatItems || flatItems.length === 0) return [];
 
-        // 1. Asegurar orden descendente (el más reciente primero)
-        // Usamos la fecha_hora que viene de la BD
-        const sortedItems = [...flatItems].sort((a, b) => 
-            new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
-        );
+    const sortedItems = [...flatItems].sort((a, b) => 
+        new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
+    );
 
-        const groups = [];
-        let currentGroup = null;
+    const groups = [];
+    let currentGroup = null;
 
-        // 2. Iterar y agrupar por cercanía
-        for (const item of sortedItems) {
-            const itemTime = new Date(item.fecha_hora).getTime();
+    for (const item of sortedItems) {
+        const itemTime = new Date(item.fecha_hora).getTime();
 
-            // Si ya tenemos un grupo abierto, verificamos si este ítem pertenece a él
-            if (currentGroup) {
-                const groupTime = new Date(currentGroup.fecha).getTime();
-                
-                // Calculamos la diferencia en segundos
-                const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
+        if (currentGroup) {
+            const groupTime = new Date(currentGroup.fecha).getTime();
+            const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
 
-                // UMBRAL DE SEGURIDAD: 10 SEGUNDOS
-                // Como el POS envía todo en bucle, la diferencia será de ms. 
-                // 10 segundos cubre holgadamente cualquier retraso de red o cambio de minuto.
-                if (diffSeconds <= 10 && item.vendedor === currentGroup.vendedor) {
-                    
-                    // Pertenece al grupo actual
-                    currentGroup.items.push({
-                        producto: item.producto,
-                        codigo: item.codigo,
-                        cantidad: item.cantidad,
-                        precioUnitario: item.precio_unitario,
-                    });
-                    // Sumamos al total
-                    currentGroup.totalVenta += (Number(item.precio_unitario) * Number(item.cantidad));
-                    
-                    // Continuamos al siguiente item
-                    continue; 
-                }
-            }
-
-            // Si no pertenece (o es el primero), creamos un NUEVO GRUPO
-            currentGroup = {
-                id: item.id, // ID referencial del primer item
-                fecha: item.fecha_hora,
-                vendedor: item.vendedor || 'Sistema',
-                totalVenta: (Number(item.precio_unitario) * Number(item.cantidad)),
-                items: [{
+            // Agrupamos si fue hace menos de 10 segundos Y es el mismo vendedor
+            if (diffSeconds <= 10 && item.vendedor === currentGroup.vendedor) {
+                currentGroup.items.push({
                     producto: item.producto,
                     codigo: item.codigo,
                     cantidad: item.cantidad,
                     precioUnitario: item.precio_unitario,
-                }]
-            };
-            groups.push(currentGroup);
+                });
+                currentGroup.totalVenta += (Number(item.precio_unitario) * Number(item.cantidad));
+                continue; 
+            }
         }
 
-        return groups;
-    };
+        currentGroup = {
+            id: item.id,
+            fecha: item.fecha_hora,
+            vendedor: item.vendedor || 'Desconocido', // <--- Mostrará el nombre real enviado por el backend
+            totalVenta: (Number(item.precio_unitario) * Number(item.cantidad)),
+            items: [{
+                producto: item.producto,
+                codigo: item.codigo,
+                cantidad: item.cantidad,
+                precioUnitario: item.precio_unitario,
+            }]
+        };
+        groups.push(currentGroup);
+    }
+    return groups;
+};
 
     // --- FUNCIÓN DE IMPRESIÓN ---
     const handleReprint = async (saleRow, displayRef) => {

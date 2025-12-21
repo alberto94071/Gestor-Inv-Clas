@@ -276,9 +276,10 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
                 h.total_venta as totalVenta,
                 p.nombre as producto,
                 p.codigo_barras as codigo,
-                'Sistema' as vendedor
+                u.nombre as vendedor
             FROM historial_ventas h
             JOIN productos p ON h.producto_id = p.id
+            LEFT JOIN usuarios u ON h.user_id = u.id
             ORDER BY h.fecha_venta DESC
         `;
         
