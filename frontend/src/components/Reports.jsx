@@ -12,20 +12,19 @@ import API from '../api/axiosInstance';
 
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// --- ICONOS PARA LOS RECIBOS (CARTA Y TÉRMICO) ---
-// Asegúrate de que estas URLs sean accesibles públicamente
+// --- ICONOS ---
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
 const ICON_WP = "https://cdn-icons-png.flaticon.com/512/733/733585.png";
 
-
 // --- COMPONENTE FILA ---
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
-    // Usamos fecha_venta si existe (del backend nuevo), si no, un fallback
-    const fechaRef = row.fecha_venta || row.fecha || new Date().toISOString();
-    const displayRef = `REF-${new Date(fechaRef).getTime().toString().slice(-6)}`;
+    
+    // 🟢 CORRECCIÓN: Usamos 'row.fecha' que ya fue normalizado en el algoritmo
+    const fechaObj = new Date(row.fecha);
+    const displayRef = `REF-${fechaObj.getTime().toString().slice(-6)}`;
     const vendedorNombre = row.vendedor || 'Sistema';
 
     return (
@@ -41,11 +40,11 @@ const Row = ({ row, onReprint }) => {
                         <Box display="flex" alignItems="center" gap={1}>
                             <CalendarMonth fontSize="small" color="action" />
                             <Typography variant="body2" fontWeight="bold">
-                                {new Date(fechaRef).toLocaleDateString('es-GT')}
+                                {fechaObj.toLocaleDateString('es-GT')}
                             </Typography>
                         </Box>
                         <Typography variant="caption" color="textSecondary" sx={{ ml: 3 }}>
-                            {new Date(fechaRef).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </Typography>
                     </Box>
                 </TableCell>
@@ -131,6 +130,7 @@ const Reports = () => {
             const response = await API.get('/inventory/sales-history', {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            // console.log("Datos del server:", response.data); 
             setSalesData(processSalesSmartly(response.data));
         } catch (err) {
             setError("No se pudo cargar el historial.");
@@ -139,25 +139,32 @@ const Reports = () => {
         }
     };
 
+    // 🟢 ALGORITMO CORREGIDO PARA CAPTURAR LA FECHA
     const processSalesSmartly = (flatItems) => {
         if (!flatItems || flatItems.length === 0) return [];
-        // Usamos la fecha correcta que viene del backend nuevo
-        const sortedItems = [...flatItems].sort((a, b) => 
-            new Date(b.fecha_venta).getTime() - new Date(a.fecha_venta).getTime()
-        );
+        
+        // Normalizar la fecha. El backend envía 'fecha_hora', pero a veces 'fecha_venta'.
+        // Aquí detectamos cuál existe.
+        const sortedItems = [...flatItems].sort((a, b) => {
+            const dateA = new Date(a.fecha_hora || a.fecha_venta || new Date());
+            const dateB = new Date(b.fecha_hora || b.fecha_venta || new Date());
+            return dateB - dateA;
+        });
         
         const groups = [];
         let currentGroup = null;
 
         for (const item of sortedItems) {
-            const itemTime = new Date(item.fecha_venta).getTime();
-            const precio = Number(item.precio_unitario);
-            const totalItem = Number(item.totalVenta);
-            // El vendedor ya viene correctamente del backend gracias al COALESCE
+            // Capturamos la fecha real del item
+            const rawDate = item.fecha_hora || item.fecha_venta || new Date().toISOString();
+            const itemTime = new Date(rawDate).getTime();
+
+            const precio = Number(item.precio_unitario || item.precioUnitario);
+            const totalItem = Number(item.totalVenta || item.totalventa || (precio * item.cantidad));
             const vendedor = item.vendedor; 
 
             if (currentGroup) {
-                const groupTime = new Date(currentGroup.fecha_venta).getTime();
+                const groupTime = new Date(currentGroup.fecha).getTime();
                 const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
 
                 if (diffSeconds <= 10 && vendedor === currentGroup.vendedor) {
@@ -171,9 +178,10 @@ const Reports = () => {
                 }
             }
 
+            // Creamos un nuevo grupo con la propiedad estandarizada 'fecha'
             currentGroup = {
                 id: item.id,
-                fecha_venta: item.fecha_venta, // Mantenemos la fecha original
+                fecha: rawDate, // <--- AQUÍ GUARDAMOS LA FECHA CORRECTA
                 vendedor: vendedor,
                 totalVenta: totalItem,
                 items: [{
@@ -198,22 +206,21 @@ const Reports = () => {
             if (!printWindow) return alert("Permite las ventanas emergentes.");
 
             const totalPrint = saleRow.totalVenta;
-            const fechaVenta = new Date(saleRow.fecha_venta);
+            // 🟢 CORRECCIÓN: Usamos 'saleRow.fecha' que garantizamos en la función processSalesSmartly
+            const fechaVenta = new Date(saleRow.fecha); 
 
-            // Generar URL del QR (funciona para ambos formatos)
             const qrUrl = config.instagram_url 
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
                 : '';
 
-            // --- CSS PROFESIONAL PARA 80MM ---
             const estilos80mm = `
                 <style>
                     @page { size: 80mm auto; margin: 0mm; }
                     body { 
-                        width: 72mm; /* Margen de seguridad para impresoras de 80mm */
+                        width: 72mm; 
                         margin: 0 auto; 
                         padding: 5px 2px; 
-                        font-family: 'Courier New', monospace; /* Fuente monoespaciada para alinear mejor */
+                        font-family: 'Courier New', monospace; 
                         font-size: 12px; 
                         color: #000; 
                     }
@@ -222,18 +229,13 @@ const Reports = () => {
                     .divider { border-top: 1px dashed #000; margin: 6px 0; }
                     .info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
                     
-                    /* LOGO MÁS PEQUEÑO Y CENTRADO */
                     #logo-img { 
                         display: block; 
                         margin: 5px auto; 
-                        width: 40mm; /* Ancho fijo más pequeño */
+                        width: 40mm; 
                         height: auto; 
                         object-fit: contain;
-                         /* Opcional: si la impresora es puramente B/N y el logo a color da problemas */
-                        /* filter: grayscale(100%) contrast(150%); */
                     }
-
-                    /* ESTILOS REDES SOCIALES 80MM */
                     .socials-container { margin-top: 10px; padding-top: 5px; border-top: 1px dotted #000; }
                     .social-item-mini { display: flex; align-items: center; justify-content: center; margin-bottom: 3px; font-size: 10px; }
                     .social-icon-mini { width: 14px; height: 14px; margin-right: 5px; }
@@ -291,11 +293,10 @@ const Reports = () => {
                 <div class="center" style="font-size: 9px; margin-top: 5px;">Documento no contable</div>
             `;
 
-            // --- ESTILOS CARTA (PROFESIONAL COMPLETO) ---
             const estilosCarta = `
                 <style>
                 @page { size: letter portrait; margin: 0.8cm; }
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
                 .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
                 .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
                 .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
@@ -365,20 +366,9 @@ const Reports = () => {
                 <div style="text-align:center; margin-top:40px; font-size:18px; font-weight:bold; color:#555;">${config.mensaje_final || "¡Gracias por tu preferencia!"}</div>
             `;
 
-            printWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Imprimir Recibo</title>
-                        ${esCarta ? estilosCarta : estilos80mm}
-                    </head>
-                    <body>
-                        ${esCarta ? contenidoCarta : contenido80mm}
-                    </body>
-                </html>
-            `);
+            printWindow.document.write(`<html><head><title>Ticket</title>${esCarta ? estilosCarta : estilos80mm}</head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`);
             printWindow.document.close();
 
-            // Lógica de carga de imagen para 80mm
             const logoEl = printWindow.document.getElementById('logo-img');
             const is80mm = !esCarta;
 
@@ -388,14 +378,12 @@ const Reports = () => {
                     printWindow.print();
                     printWindow.close();
                 };
-                logoEl.onerror = () => { // Si falla el logo, imprime sin él
+                logoEl.onerror = () => { 
                     printWindow.print();
                     printWindow.close();
                 };
-                // Timeout de seguridad
                 setTimeout(() => { if (!printWindow.closed) { printWindow.print(); printWindow.close(); } }, 3000);
             } else {
-                // Para carta o sin logo, espera un poco y ejecuta
                 setTimeout(() => {
                     printWindow.focus();
                     printWindow.print();
@@ -430,9 +418,6 @@ const Reports = () => {
                         </TableHead>
                         <TableBody>
                             {salesData.map((row) => <Row key={row.id} row={row} onReprint={handleReprint} />)}
-                            {salesData.length === 0 && (
-                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 5 }}>No hay ventas registradas.</TableCell></TableRow>
-                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>

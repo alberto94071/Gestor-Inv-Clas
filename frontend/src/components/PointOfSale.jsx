@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Box, Paper, Typography, TextField, Button, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip, Snackbar
+    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip
 } from '@mui/material';
 import { 
     Delete, RemoveCircleOutline, AddCircleOutline, 
@@ -17,6 +17,7 @@ const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
+const ICON_WP = "https://cdn-icons-png.flaticon.com/512/733/733585.png";
 
 const PointOfSale = () => {
     // --- ESTADOS ---
@@ -26,12 +27,16 @@ const PointOfSale = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
+    const [ticketConfig, setTicketConfig] = useState({}); // Nuevo estado para config
     
     // Guardar última venta
     const [lastSaleCart, setLastSaleCart] = useState(null);
     const [lastTicketId, setLastTicketId] = useState(null);
 
     const inputRef = useRef(null);
+
+    // Obtener usuario actual
+    const currentUser = localStorage.getItem('userName') || 'Cajero';
 
     // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
@@ -50,9 +55,21 @@ const PointOfSale = () => {
         }
     };
 
+    // Nueva función para cargar la config del ticket al inicio
+    const fetchTicketConfig = async () => {
+        try {
+            const token = localStorage.getItem('authToken');
+            const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
+            setTicketConfig(res.data || {});
+        } catch (e) { console.error("Error cargando config ticket", e); }
+    };
+
     useEffect(() => {
         loadInventory();
+        fetchTicketConfig(); // Cargamos configuración
         focusInput();
+        
+        // Lógica de carrito persistente
         const savedCart = localStorage.getItem('pos_persistent_cart');
         let finalCart = savedCart ? JSON.parse(savedCart) : [];
 
@@ -140,6 +157,8 @@ const PointOfSale = () => {
         setError(null);
         try {
             const token = localStorage.getItem('authToken');
+            
+            // Mantenemos tu bucle original para asegurar compatibilidad
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
@@ -150,10 +169,12 @@ const PointOfSale = () => {
             
             const currentCart = [...cart];
             const ticketId = Date.now();
+            
             setLastSaleCart(currentCart);
             setLastTicketId(ticketId);
 
-            await handlePrintTicket(currentCart, ticketId);
+            // Imprimir automáticamente pasando el usuario actual
+            await handlePrintTicket(currentCart, ticketId, currentUser);
 
             setSuccessMsg("¡Venta registrada con éxito!");
             setCart([]); 
@@ -168,238 +189,129 @@ const PointOfSale = () => {
         }
     };
 
-    // --- IMPRESIÓN (CORREGIDA) ---
-    const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now()) => {
+    // --- IMPRESIÓN (MEJORADA Y DEFINITIVA) ---
+    const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now(), vendedorName = currentUser) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
         try {
-            const token = localStorage.getItem('authToken');
-            const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
-            const config = res.data || {};
-
+            // Usamos el estado ticketConfig que ya cargamos al inicio (más rápido)
+            const config = ticketConfig; 
             const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
+            
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Permite ventanas emergentes para imprimir.");
 
             const totalPrint = cartToPrint.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
+            const fechaActual = new Date();
 
-            // Generamos la URL del QR directamente como imagen (API pública segura)
-            // Esto asegura que se imprima sin scripts complejos
             const qrUrl = config.instagram_url 
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
                 : '';
 
-            // ================= ESTILOS CARTA (CORREGIDO PARA IMPRESIÓN) =================
-            const estilosCarta = `
-                @page { size: letter portrait; margin: 0.8cm; }
-                body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                
-                .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-                .logo-circle { width: 100px; height: 100px; border: 2px solid #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-                .logo-circle img { width: 100%; height: 100%; object-fit: cover; }
-                .title-receipt { font-family: 'Brush Script MT', 'Segoe Script', cursive; font-size: 60px; color: #000; margin: 0; line-height: 1; text-align: right; }
-                .business-name { text-align: center; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; margin: 10px 0 30px 0; font-weight: 400; }
-                .info-bar { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; font-weight: bold; }
-                
-                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 2px solid #000; }
-                th { border: 1px solid #000; padding: 12px; text-align: center; background: #fff; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
-                td { border: 1px solid #000; padding: 12px; font-size: 14px; vertical-align: middle; }
-                .col-desc { text-align: left; }
-                .col-center { text-align: center; }
-                .col-right { text-align: right; }
-
-                .bottom-section { display: flex; justify-content: flex-end; margin-top: 10px; }
-                .totals-box { width: 40%; }
-                .total-row.final { display: flex; justify-content: space-between; border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; font-size: 20px; margin-top: 5px; padding: 10px 0; }
-
-                .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: center; }
-                
-                /* CORRECCIÓN: Forzamos la impresión del fondo negro */
-                .stamp-container { text-align: center; }
-                .stamp { 
-                    width: 150px; height: 150px; 
-                    background-color: #333 !important; /* Importante */
-                    color: #fff !important; 
-                    border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-                    font-family: 'Brush Script MT', cursive; 
-                    font-size: 40px; 
-                    transform: rotate(-10deg);
-                    box-shadow: 0 0 0 5px #fff, 0 0 0 8px #333;
-                    -webkit-print-color-adjust: exact; /* Para Chrome/Edge */
-                    print-color-adjust: exact; /* Estándar */
-                }
-                
-                .socials { text-align: right; font-size: 18px; line-height: 2.5; }
-                .social-item { display: flex; align-items: center; justify-content: flex-end; gap: 15px; }
-                .social-icon { width: 28px; height: 28px; object-fit: contain; } 
-                .qr-img { margin-left: 15px; border: 2px solid #333; padding: 2px; background: #fff; width: 70px; height: 70px; display: inline-block; vertical-align: middle; }
-
-                .footer-large-msg { margin-top: 50px; text-align: center; font-size: 24px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
-            `;
-
-            const contenidoCarta = `
-                <div class="header">
-                    <div class="logo-circle">
-                        ${config.logo_url ? `<img src="${config.logo_url}" />` : `<span>LOGO</span>`}
-                    </div>
-                    <div>
-                        <h1 class="title-receipt">Recibo</h1>
-                    </div>
-                </div>
-
-                <div class="business-name">
-                    ${config.nombre_empresa || "NOMBRE DE TU NEGOCIO"}
-                </div>
-
-                <div class="info-bar">
-                    <span>Nº Orden: ${ticketId}</span>
-                    <span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span>
-                </div>
-
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 50%">Descripción del Artículo</th>
-                            <th style="width: 10%">Cant.</th>
-                            <th style="width: 20%">Precio Unit.</th>
-                            <th style="width: 20%">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${cartToPrint.map(item => `
-                            <tr>
-                                <td class="col-desc">${item.nombre}</td>
-                                <td class="col-center">${item.qty}</td>
-                                <td class="col-center">Q${Number(item.precio_venta).toFixed(2)}</td>
-                                <td class="col-right">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
-                            </tr>
-                        `).join('')}
-                        <tr><td style="height: 30px;"></td><td></td><td></td><td></td></tr>
-                    </tbody>
-                </table>
-
-                <div class="bottom-section">
-                    <div class="totals-box">
-                        <div class="total-row final">
-                            <span>TOTAL</span>
-                            <span>Q${totalPrint.toFixed(2)}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="footer">
-                    <div class="stamp-container">
-                        <div class="stamp">¡Gracias!</div>
-                    </div>
-                    
-                    <div class="socials">
-                        <div class="social-item">
-                            <span>@potters_store</span>
-                            <img src="${ICON_TIKTOK}" class="social-icon" alt="TikTok"/>
-                        </div>
-                        <div class="social-item">
-                            <span>Potter's store</span>
-                            <img src="${ICON_FB}" class="social-icon" alt="Facebook"/>
-                        </div>
-                        <div class="social-item">
-                             ${qrUrl ? `<img src="${qrUrl}" class="qr-img" alt="QR" />` : ''}
-                            <span>@potters_store_</span>
-                            <img src="${ICON_IG}" class="social-icon" alt="Instagram"/>
-                        </div>
-                    </div>
-                </div>
-
-                 <div class="footer-large-msg">
-                    ${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}
-                 </div>
-            `;
-
-            // ================= ESTILOS 80MM (Térmico) =================
+            // ================= ESTILOS 80MM (PROFESIONAL) =================
             const estilos80mm = `
-                @page { size: 80mm auto; margin: 0; }
-                body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
-                .center { text-align: center; } .bold { font-weight: bold; }
-                .dashed-top { border-top: 1px dashed #000; } .dashed-bottom { border-bottom: 1px dashed #000; }
-                .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
-                th { text-align: left; border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; }
-                td { vertical-align: top; font-size: 11px; padding: 4px 0; }
-                .footer-contact { margin-top: 15px; font-size: 10px; text-align: center; }
-                .footer-large-msg-80 { margin-top: 20px; text-align: center; font-size: 16px; font-weight: bold; text-transform: uppercase; }
+                <style>
+                    @page { size: 80mm auto; margin: 0; }
+                    body { 
+                        width: 72mm; margin: 0 auto; padding: 5px 2px; 
+                        font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; 
+                    }
+                    .center { text-align: center; } 
+                    .bold { font-weight: bold; }
+                    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+                    .info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
+                    
+                    /* Logo ajustado */
+                    #logo-img { display: block; margin: 5px auto; width: 40mm; height: auto; object-fit: contain; }
+                    
+                    /* Redes Sociales y QR Mini */
+                    .socials-container { margin-top: 10px; padding-top: 5px; border-top: 1px dotted #000; }
+                    .social-item-mini { display: flex; align-items: center; justify-content: center; margin-bottom: 3px; font-size: 10px; }
+                    .social-icon-mini { width: 14px; height: 14px; margin-right: 5px; }
+                    .qr-mini { width: 35mm; height: 35mm; margin: 5px auto 0 auto; display: block; }
+                    .wp-icon { width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; }
+                    
+                    /* Tabla */
+                    table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 11px; }
+                    th { text-align: left; border-bottom: 1px dashed #000; padding: 3px 0; }
+                    td { vertical-align: top; padding: 3px 0; }
+                </style>
             `;
 
             const contenido80mm = `
-                <div class="center bold" style="font-size: 14px; margin-bottom: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
-                <div class="center">Comprobante de Compra</div>
-                <div class="center">Ticket ID: ${ticketId}</div>
-                <br/>
-                <div class="info-row"><span>Fecha: ${new Date().toLocaleDateString('es-GT')}</span></div>
-                <div class="info-row"><span>Hora: ${new Date().toLocaleTimeString('es-GT')}</span></div>
+                <div class="center">
+                    ${config.logo_url ? `<img id="logo-img" src="${config.logo_url}" alt="LOGO" />` : ''}
+                    <div class="bold" style="font-size: 15px; margin-top: 5px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
+                    <div style="font-size: 10px; margin-top: 4px;">${config.direccion || ''}</div>
+                    ${config.whatsapp ? `<div style="font-size: 10px; margin-top: 2px;"><img src="${ICON_WP}" class="wp-icon"/>${config.whatsapp}</div>` : ''}
+                </div>
 
+                <div class="divider"></div>
+                <div class="info-row"><span>FECHA:</span> <span>${fechaActual.toLocaleDateString()}</span></div>
+                <div class="info-row"><span>HORA:</span> <span>${fechaActual.toLocaleTimeString()}</span></div>
+                <div class="info-row"><span>REF:</span> <span>REF-${ticketId.toString().slice(-6)}</span></div>
+                <div class="info-row bold"><span>VENDEDOR:</span> <span>${vendedorName}</span></div>
+
+                <div class="divider"></div>
                 <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 45%;">DESCRIPCIÓN</th>
-                            <th style="width: 15%; text-align: center;">CANT.</th>
-                            <th style="width: 20%; text-align: right;">P.UNIT</th>
-                            <th style="width: 20%; text-align: right;">TOTAL</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th align="left">PROD</th><th align="center">CANT</th><th align="right">TOTAL</th></tr></thead>
                     <tbody>
                         ${cartToPrint.map(item => `
                             <tr>
-                                <td>${item.nombre.toUpperCase()}</td>
-                                <td style="text-align: center;">${item.qty}</td>
-                                <td style="text-align: right;">Q${Number(item.precio_venta).toFixed(2)}</td>
-                                <td style="text-align: right;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
+                                <td>${item.nombre.substring(0,18)}</td>
+                                <td align="center">${item.qty}</td>
+                                <td align="right">Q${(Number(item.precio_venta) * item.qty).toFixed(2)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
-
-                <div class="dashed-top"></div>
-                <div style="margin-top: 5px;">
-                    <div class="info-row bold" style="font-size: 13px;">
-                        <span>TOTAL:</span>
-                        <span>Q${totalPrint.toFixed(2)}</span>
-                    </div>
-                </div>
-                <div class="dashed-bottom" style="margin-top: 5px;"></div>
-
-                <div class="footer-contact">
-                    ${config.direccion ? `Visitenos en ${config.direccion}` : ''}<br/>
-                    ${config.whatsapp ? `Tel: ${config.whatsapp}` : ''}
+                
+                <div class="divider"></div>
+                <div class="info-row bold" style="font-size: 14px; margin-top: 5px;"><span>TOTAL:</span> <span>Q${totalPrint.toFixed(2)}</span></div>
+                
+                <div class="socials-container center">
+                    <div class="bold" style="font-size: 11px; margin-bottom: 4px;">¡SÍGUENOS!</div>
+                    <div class="social-item-mini"><img src="${ICON_IG}" class="social-icon-mini"/> <span>@potters_store_</span></div>
+                    <div class="social-item-mini"><img src="${ICON_FB}" class="social-icon-mini"/> <span>Potter's store</span></div>
+                    <div class="social-item-mini"><img src="${ICON_TIKTOK}" class="social-icon-mini"/> <span>@potters_store</span></div>
+                    
+                    ${qrUrl ? `<div style="margin-top: 8px;"><img src="${qrUrl}" class="qr-mini"/><div style="font-size: 9px;">Escanea para Instagram</div></div>` : ''}
                 </div>
 
-                <div class="footer-large-msg-80">
-                    ${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}
-                </div>
+                <div class="divider"></div>
+                <div class="center bold" style="margin-top: 10px; font-size: 12px;">${config.mensaje_final || "¡GRACIAS!"}</div>
             `;
 
-            // ================= INYECCIÓN FINAL =================
-            const html = `
-                <html>
-                <head>
-                    <title>Ticket ${ticketId}</title>
-                    <style>
-                        ${esCarta ? estilosCarta : estilos80mm}
-                    </style>
-                </head>
-                <body>
-                    ${esCarta ? contenidoCarta : contenido80mm}
-                </body>
-                </html>
+            // ================= ESTILOS CARTA (Resumido para POS) =================
+            const estilosCarta = `<style>body{font-family:sans-serif;padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;}</style>`;
+            const contenidoCarta = `
+                <div class="header"><h1>Recibo de Venta</h1></div>
+                <p><strong>Vendedor:</strong> ${vendedorName}</p>
+                <p><strong>Fecha:</strong> ${fechaActual.toLocaleString()}</p>
+                <table style="width:100%; margin-top:20px;">
+                    <thead><tr><th align="left">Producto</th><th>Cant.</th><th align="right">Total</th></tr></thead>
+                    <tbody>
+                        ${cartToPrint.map(item => `<tr><td>${item.nombre}</td><td align="center">${item.qty}</td><td align="right">Q${(item.precio_venta * item.qty).toFixed(2)}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+                <h2 style="text-align:right;">Total: Q${totalPrint.toFixed(2)}</h2>
             `;
+
+            // INYECCIÓN HTML
+            const html = `<html><head><title>Ticket ${ticketId}</title><style>${esCarta ? estilosCarta : estilos80mm}</style></head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`;
 
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // Esperamos a que las imágenes carguen antes de imprimir
-            setTimeout(() => { 
-                printWindow.focus(); 
-                printWindow.print(); 
-                printWindow.close(); 
-            }, 1000); // Damos 1 segundo para cargar QR e iconos
+            // Espera de imágenes (Logo + QR)
+            const logoEl = printWindow.document.getElementById('logo-img');
+            if (!esCarta && logoEl && config.logo_url) {
+                logoEl.onload = () => { printWindow.focus(); printWindow.print(); printWindow.close(); };
+                logoEl.onerror = () => { printWindow.print(); printWindow.close(); };
+                setTimeout(() => { if (!printWindow.closed) { printWindow.print(); printWindow.close(); } }, 2000);
+            } else {
+                setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
+            }
 
         } catch (e) {
             console.error(e);
@@ -429,7 +341,7 @@ const PointOfSale = () => {
                 {lastSaleCart && (
                     <Button 
                         startIcon={<Print />} 
-                        onClick={() => handlePrintTicket(lastSaleCart, lastTicketId)}
+                        onClick={() => handlePrintTicket(lastSaleCart, lastTicketId, currentUser)}
                         variant="outlined" size="small" color="secondary"
                     >
                         Re-imprimir Ticket
@@ -438,7 +350,6 @@ const PointOfSale = () => {
             </Box>
 
             <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden', pb: 1 }}>
-                
                 {/* COLUMNA IZQUIERDA */}
                 <Paper elevation={3} sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <TextField
