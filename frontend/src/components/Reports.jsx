@@ -15,7 +15,10 @@ const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 // --- COMPONENTE FILA ---
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
-    const displayRef = `REF-${new Date(row.fecha).getTime().toString().slice(-6)}`;
+    const displayRef = `REF-${new Date(row.fecha || row.fecha_hora).getTime().toString().slice(-6)}`;
+
+    // Fallback: Si el backend no manda vendedor, intenta buscarlo o pone 'Sistema'
+    const vendedorNombre = row.vendedor || 'Sistema';
 
     return (
         <>
@@ -30,11 +33,11 @@ const Row = ({ row, onReprint }) => {
                         <Box display="flex" alignItems="center" gap={1}>
                             <CalendarMonth fontSize="small" color="action" />
                             <Typography variant="body2" fontWeight="bold">
-                                {new Date(row.fecha).toLocaleDateString('es-GT')}
+                                {new Date(row.fecha || row.fecha_hora).toLocaleDateString('es-GT')}
                             </Typography>
                         </Box>
                         <Typography variant="caption" color="textSecondary" sx={{ ml: 3 }}>
-                            {new Date(row.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {new Date(row.fecha || row.fecha_hora).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </Typography>
                     </Box>
                 </TableCell>
@@ -44,8 +47,9 @@ const Row = ({ row, onReprint }) => {
                 <TableCell>
                      <Box display="flex" alignItems="center" gap={1}>
                         <Person fontSize="small" color="action" />
-                        {/* Aquí mostramos lo que viene del backend */}
-                        <Typography variant="body2" fontWeight="bold">{row.vendedor}</Typography>
+                        <Typography variant="body2" fontWeight="bold">
+                            {vendedorNombre}
+                        </Typography>
                     </Box>
                 </TableCell>
                 <TableCell align="right">
@@ -53,7 +57,8 @@ const Row = ({ row, onReprint }) => {
                 </TableCell>
                 <TableCell align="right">
                     <Typography fontWeight="bold" color="green">
-                        {formatCurrency(row.totalVenta)}
+                        {/* Soporte para mayúsculas o minúsculas según venga del backend */}
+                        {formatCurrency(row.totalVenta || row.totalventa)}
                     </Typography>
                 </TableCell>
                 <TableCell align="center">
@@ -87,8 +92,10 @@ const Row = ({ row, onReprint }) => {
                                         <TableRow key={index}>
                                             <TableCell sx={{fontWeight:'bold'}}>{item.producto}</TableCell>
                                             <TableCell align="right">{item.cantidad}</TableCell>
-                                            <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
-                                            <TableCell align="right">{formatCurrency(item.cantidad * item.precioUnitario)}</TableCell>
+                                            <TableCell align="right">{formatCurrency(item.precioUnitario || item.precio_unitario)}</TableCell>
+                                            <TableCell align="right">
+                                                {formatCurrency((item.precioUnitario || item.precio_unitario) * item.cantidad)}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -117,7 +124,7 @@ const Reports = () => {
             const response = await API.get('/inventory/sales-history', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            console.log("DATOS RECIBIDOS DEL SERVER:", response.data); // 🔍 DIAGNÓSTICO EN CONSOLA
+            console.log("Datos:", response.data);
             setSalesData(processSalesSmartly(response.data));
         } catch (err) {
             setError("No se pudo cargar el historial.");
@@ -128,35 +135,48 @@ const Reports = () => {
 
     const processSalesSmartly = (flatItems) => {
         if (!flatItems || flatItems.length === 0) return [];
-        const sortedItems = [...flatItems].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+        // Normalizamos fecha_hora vs fecha para que no falle el sort
+        const sortedItems = [...flatItems].sort((a, b) => 
+            new Date(b.fecha_hora || b.fecha_venta).getTime() - new Date(a.fecha_hora || a.fecha_venta).getTime()
+        );
+        
         const groups = [];
         let currentGroup = null;
 
         for (const item of sortedItems) {
-            const itemTime = new Date(item.fecha_hora).getTime();
+            const dateStr = item.fecha_hora || item.fecha_venta;
+            const itemTime = new Date(dateStr).getTime();
+            
+            // Soporte para nombres de columnas variables (minúsculas o camelCase)
+            const precio = Number(item.precio_unitario || item.precioUnitario);
+            const totalItem = Number(item.totalventa || item.totalVenta || (precio * item.cantidad));
+            const vendedor = item.vendedor || 'Sistema';
+
             if (currentGroup) {
                 const groupTime = new Date(currentGroup.fecha).getTime();
                 const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
-                // Agrupamos si el tiempo es cercano Y el vendedor es el mismo
-                if (diffSeconds <= 10 && item.vendedor === currentGroup.vendedor) {
+
+                // Agrupamos si es < 10 seg Y mismo vendedor
+                if (diffSeconds <= 10 && vendedor === currentGroup.vendedor) {
                     currentGroup.items.push({
                         producto: item.producto,
                         cantidad: item.cantidad,
-                        precioUnitario: item.precio_unitario,
+                        precioUnitario: precio,
                     });
-                    currentGroup.totalVenta += (Number(item.precio_unitario) * Number(item.cantidad));
+                    currentGroup.totalVenta += (precio * item.cantidad);
                     continue; 
                 }
             }
+
             currentGroup = {
                 id: item.id,
-                fecha: item.fecha_hora,
-                vendedor: item.vendedor || 'Sistema',
-                totalVenta: (Number(item.precio_unitario) * Number(item.cantidad)),
+                fecha: dateStr,
+                vendedor: vendedor,
+                totalVenta: (precio * item.cantidad),
                 items: [{
                     producto: item.producto,
                     cantidad: item.cantidad,
-                    precioUnitario: item.precio_unitario,
+                    precioUnitario: precio,
                 }]
             };
             groups.push(currentGroup);
@@ -166,8 +186,6 @@ const Reports = () => {
 
     const handleReprint = async (saleRow, displayRef) => {
         try {
-            console.log("INTENTANDO IMPRIMIR FILA:", saleRow); // 🔍 VERIFICAR SI TIENE VENDEDOR AQUÍ
-            
             const token = localStorage.getItem('authToken');
             const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
             const config = res.data || {};
@@ -178,37 +196,48 @@ const Reports = () => {
 
             const totalPrint = saleRow.totalVenta;
 
-            // --- ESTILOS 80MM MEJORADOS ---
+            // --- CSS 80mm CORREGIDO PARA LOGO ---
             const estilos80mm = `
                 <style>
                     @page { size: 80mm auto; margin: 0; }
-                    body { width: 72mm; margin: 0 auto; padding: 5px; font-family: monospace; font-size: 12px; color: #000; }
+                    body { 
+                        width: 72mm; 
+                        margin: 0 auto; 
+                        padding: 5px 2px; 
+                        font-family: monospace; 
+                        font-size: 12px; 
+                        color: #000; 
+                    }
                     .center { text-align: center; } 
                     .bold { font-weight: bold; }
                     .divider { border-top: 1px dashed #000; margin: 5px 0; }
                     .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
                     
-                    /* Aseguramos que la imagen ocupe espacio */
+                    /* CSS DEL LOGO AJUSTADO */
                     #logo-img { 
                         display: block; 
                         margin: 0 auto 5px auto; 
-                        max-width: 60mm; 
+                        max-width: 80%;   /* Evita que se salga del papel */
                         height: auto; 
+                        object-fit: contain;
                     }
                 </style>
             `;
 
             const contenido80mm = `
                 <div class="center">
-                    ${config.logo_url ? `<img id="logo-img" src="${config.logo_url}" />` : ''}
+                    ${config.logo_url 
+                        ? `<img id="logo-img" src="${config.logo_url}" alt="LOGO" />` 
+                        : '<div class="bold">[SIN LOGO]</div>'
+                    }
                     <div class="bold" style="font-size: 14px; margin-top: 5px;">${config.nombre_empresa || "TIENDA"}</div>
                     <div style="font-size: 10px;">${config.direccion || ''}</div>
                 </div>
                 <div class="divider"></div>
                 <div class="info-row"><span>FECHA:</span> <span>${new Date(saleRow.fecha).toLocaleDateString()}</span></div>
-                <div class="info-row"><span>HORA:</span> <span>${new Date(saleRow.fecha).toLocaleTimeString()}</span></div>
+                <div class="info-row"><span>REF:</span> <span>${displayRef}</span></div>
                 
-                <div class="info-row bold"><span>VENDEDOR:</span> <span>${saleRow.vendedor}</span></div>
+                <div class="info-row bold"><span>VENDEDOR:</span> <span>${saleRow.vendedor || 'Sistema'}</span></div>
                 
                 <div class="divider"></div>
                 <table style="width:100%; border-collapse:collapse;">
@@ -216,7 +245,7 @@ const Reports = () => {
                     <tbody>
                         ${saleRow.items.map(item => `
                             <tr>
-                                <td>${item.producto.substring(0,20)} <br/> <small>x${item.cantidad}</small></td>
+                                <td>${item.producto.substring(0,18)} <br/> <small>x${item.cantidad}</small></td>
                                 <td align="right" valign="top">Q${(item.precioUnitario * item.cantidad).toFixed(2)}</td>
                             </tr>
                         `).join('')}
@@ -227,19 +256,22 @@ const Reports = () => {
                 <div class="center" style="margin-top: 15px;">${config.mensaje_final || "GRACIAS"}</div>
             `;
 
-            // --- ESTILOS CARTA (RESUMIDO) ---
-            const estilosCarta = `<style>body{font-family:sans-serif; padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;}</style>`;
+            // Estilos carta (resumidos para no ocupar espacio innecesario, pero funcionales)
+            const estilosCarta = `<style>body{font-family:sans-serif;padding:20px;}.header{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:10px;}img{max-width:150px;}</style>`;
             const contenidoCarta = `
-                <div class="header"><h1>Recibo</h1></div>
-                <p>Vendedor: ${saleRow.vendedor}</p>
-                <h3>Total: Q${totalPrint.toFixed(2)}</h3>
-            `;
+                <div class="header">
+                    ${config.logo_url ? `<img src="${config.logo_url}" />` : '<h1>LOGO</h1>'}
+                    <div><h1>Recibo</h1></div>
+                </div>
+                <h3>Empresa: ${config.nombre_empresa}</h3>
+                <p>Vendedor: ${saleRow.vendedor || 'Sistema'}</p>
+                <p>Total: Q${totalPrint.toFixed(2)}</p>
+                `;
 
-            // Escribimos el contenido en la ventana
             printWindow.document.write(`
                 <html>
                     <head>
-                        <title>Imprimir</title>
+                        <title>Imprimir Ticket</title>
                         ${esCarta ? estilosCarta : estilos80mm}
                     </head>
                     <body>
@@ -249,34 +281,31 @@ const Reports = () => {
             `);
             printWindow.document.close();
 
-            // --- LÓGICA CRÍTICA DE CARGA DE IMAGEN ---
-            const logoElement = printWindow.document.getElementById('logo-img');
+            // --- LÓGICA DE CARGA DE IMAGEN (CLAVE PARA EL LOGO) ---
+            const logoEl = printWindow.document.getElementById('logo-img');
+            const is80mm = !esCarta;
 
-            if (logoElement && config.logo_url) {
-                // Si hay logo, esperamos a que cargue
-                console.log("Esperando carga del logo...");
-                logoElement.onload = () => {
-                    console.log("Logo cargado. Imprimiendo...");
+            if (is80mm && logoEl && config.logo_url) {
+                // Si es 80mm y hay logo, esperamos a que cargue
+                logoEl.onload = () => {
                     printWindow.focus();
                     printWindow.print();
                     printWindow.close();
                 };
-                logoElement.onerror = () => {
-                    console.log("Error cargando logo. Imprimiendo sin él...");
+                logoEl.onerror = () => {
+                    // Si falla la imagen, imprimimos igual sin bloquear
                     printWindow.print();
                     printWindow.close();
                 };
-                // Timeout de seguridad de 4 segundos
+                // Forzar impresión si tarda más de 2 segundos (seguridad)
                 setTimeout(() => {
                     if (!printWindow.closed) {
-                        console.log("Tiempo de espera agotado. Forzando impresión...");
                         printWindow.print();
                         printWindow.close();
                     }
-                }, 4000);
+                }, 2000);
             } else {
-                // Si no hay logo, imprimimos rápido
-                console.log("No hay logo configurado. Imprimiendo...");
+                // Si es carta o no hay logo, imprimimos normal
                 setTimeout(() => {
                     printWindow.focus();
                     printWindow.print();
@@ -284,10 +313,7 @@ const Reports = () => {
                 }, 500);
             }
 
-        } catch (e) { 
-            console.error(e);
-            alert("Error al imprimir."); 
-        }
+        } catch (e) { alert("Error al imprimir."); }
     };
 
     return (
