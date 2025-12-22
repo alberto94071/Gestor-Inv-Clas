@@ -10,18 +10,16 @@ import {
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
-// --- ICONOS REDES SOCIALES ---
+// --- ICONOS REDES SOCIALES PARA RECIBO CARTA ---
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
 
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// --- COMPONENTE FILA ---
+// --- COMPONENTE FILA (ACORDEÓN) ---
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
-
-    // Generamos una referencia visual basada en la hora exacta
     const displayRef = `REF-${new Date(row.fecha).getTime().toString().slice(-6)}`;
 
     return (
@@ -141,24 +139,19 @@ const Reports = () => {
         }
     };
 
-    // --- ALGORITMO DE AGRUPACIÓN INTELIGENTE ---
     const processSalesSmartly = (flatItems) => {
         if (!flatItems || flatItems.length === 0) return [];
-
         const sortedItems = [...flatItems].sort((a, b) => 
             new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
         );
-
         const groups = [];
         let currentGroup = null;
 
         for (const item of sortedItems) {
             const itemTime = new Date(item.fecha_hora).getTime();
-
             if (currentGroup) {
                 const groupTime = new Date(currentGroup.fecha).getTime();
                 const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
-
                 if (diffSeconds <= 10 && item.vendedor === currentGroup.vendedor) {
                     currentGroup.items.push({
                         producto: item.producto,
@@ -170,7 +163,6 @@ const Reports = () => {
                     continue; 
                 }
             }
-
             currentGroup = {
                 id: item.id,
                 fecha: item.fecha_hora,
@@ -188,131 +180,110 @@ const Reports = () => {
         return groups;
     };
 
+    // --- FUNCIÓN DE IMPRESIÓN CORREGIDA ---
     const handleReprint = async (saleRow, displayRef) => {
         try {
             const token = localStorage.getItem('authToken');
             const res = await API.get('/inventory/config/ticket', { headers: { Authorization: `Bearer ${token}` } });
             const config = res.data || {};
-
             const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
+
             const printWindow = window.open('', '_blank');
             if (!printWindow) return alert("Habilita las ventanas emergentes.");
 
-            const cartToPrint = saleRow.items.map(i => ({
-                nombre: i.producto,
-                qty: i.cantidad,
-                precio_venta: i.precioUnitario
-            }));
-
-            const ticketId = displayRef;
-            const totalPrint = saleRow.totalVenta;
-
-            // --- ESTILOS 80mm (LOGO Y DISEÑO) ---
+            // Estilos para 80mm (Incrustados para ignorar Ticket.css)
             const estilos80mm = `
-                @page { size: 80mm auto; margin: 0; }
-                body { width: 72mm; margin: 0 auto; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; }
-                .center { text-align: center; } .bold { font-weight: bold; }
-                .dashed-top { border-top: 1px dashed #000; margin-top: 8px;}
-                .dashed-bottom { border-bottom: 1px dashed #000; margin-bottom: 8px; }
-                .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-                th { text-align: left; border-bottom: 1px dashed #000; padding: 5px 0; font-size: 10px; }
-                td { padding: 4px 0; font-size: 10px; }
-                .logo-img { width: 40mm; height: auto; filter: grayscale(100%); margin-bottom: 5px; }
+                <style>
+                    @page { size: 80mm auto; margin: 0; }
+                    body { 
+                        width: 72mm; margin: 0 auto; padding: 4mm 2mm; 
+                        font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; 
+                    }
+                    .center { text-align: center; } .bold { font-weight: bold; }
+                    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+                    .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+                    th { text-align: left; border-bottom: 1px dashed #000; padding: 3px 0; font-size: 10px; }
+                    td { padding: 3px 0; font-size: 10px; vertical-align: top; }
+                    img.logo-80 { width: 40mm; height: auto; display: block; margin: 0 auto 5px auto; filter: grayscale(100%); }
+                </style>
             `;
 
             const contenido80mm = `
                 <div class="center">
-                    ${config.logo_url ? `<img src="${config.logo_url}" class="logo-img" />` : ''}
+                    ${config.logo_url ? `<img src="${config.logo_url}" class="logo-80" />` : ''}
                     <div class="bold" style="font-size: 14px;">${config.nombre_empresa || "POTTER'S STORE"}</div>
-                    <div style="font-size: 10px;">${config.direccion || ''}</div>
+                    <div style="font-size: 9px;">${config.direccion || ''}</div>
                 </div>
-                <div class="dashed-top"></div>
-                <div class="info-row"><span>REF:</span> <span>${ticketId}</span></div>
+                <div class="divider"></div>
+                <div class="info-row"><span>REF:</span> <span>${displayRef}</span></div>
                 <div class="info-row"><span>FECHA:</span> <span>${new Date(saleRow.fecha).toLocaleDateString()}</span></div>
                 <div class="info-row"><span>VENDEDOR:</span> <span>${saleRow.vendedor}</span></div>
-                <div class="dashed-bottom"></div>
+                <div class="divider"></div>
                 <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 45%;">DESC</th>
-                            <th style="text-align: center;">CANT</th>
-                            <th style="text-align: right;">TOT</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>DESC</th><th class="center">CANT</th><th style="text-align:right">TOT</th></tr></thead>
                     <tbody>
-                        ${cartToPrint.map(item => `
+                        ${saleRow.items.map(item => `
                             <tr>
-                                <td>${item.nombre.substring(0,18)}</td>
-                                <td style="text-align: center;">${item.qty}</td>
-                                <td style="text-align: right;">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
+                                <td>${item.producto.substring(0,18)}</td>
+                                <td class="center">${item.qty || item.cantidad}</td>
+                                <td style="text-align:right">Q${((item.precio_venta || item.precioUnitario) * (item.qty || item.cantidad)).toFixed(2)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
-                <div class="dashed-top"></div>
-                <div class="info-row bold" style="font-size: 13px; padding: 5px 0;">
-                    <span>TOTAL:</span> <span>Q${totalPrint.toFixed(2)}</span>
-                </div>
-                <div class="dashed-bottom"></div>
-                <div class="center bold" style="margin-top: 15px; font-size: 12px;">${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}</div>
+                <div class="divider"></div>
+                <div class="info-row bold" style="font-size: 12px;"><span>TOTAL:</span> <span>Q${saleRow.totalVenta.toFixed(2)}</span></div>
+                <div class="divider"></div>
+                <div class="center bold" style="margin-top: 10px; font-size: 11px;">${config.mensaje_final || "¡GRACIAS POR SU COMPRA!"}</div>
             `;
 
-            const estilosCarta = `
-                @page { size: letter; margin: 1cm; }
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                .header-carta { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
-                .logo-carta { width: 120px; height: 120px; object-fit: contain; }
-            `;
-
+            // Estilos para Carta
+            const estilosCarta = `<style>@page { size: letter; margin: 1cm; } body { font-family: Arial, sans-serif; } .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px; } .logo-carta { width: 100px; height: auto; }</style>`;
             const contenidoCarta = `
-                <div class="header-carta">
+                <div class="header">
                     ${config.logo_url ? `<img src="${config.logo_url}" class="logo-carta" />` : '<div></div>'}
-                    <div style="text-align: right;">
-                        <h1 style="margin:0;">COMPROBANTE DE VENTA</h1>
-                        <p>Ref: ${ticketId} | Vendedor: ${saleRow.vendedor}</p>
-                    </div>
+                    <div style="text-align: right;"><h1>RECIBO DE VENTA</h1><p>Ref: ${displayRef}</p></div>
                 </div>
-                <h3>${config.nombre_empresa}</h3>
-                <p>Fecha: ${new Date(saleRow.fecha).toLocaleString()}</p>
+                <p><strong>Vendedor:</strong> ${saleRow.vendedor}</p>
+                <p><strong>Fecha:</strong> ${new Date(saleRow.fecha).toLocaleString()}</p>
                 <table border="1" style="width:100%; border-collapse: collapse; margin-top: 20px;">
                     <thead><tr style="background:#eee;"><th>Producto</th><th>Cant.</th><th>P. Unit</th><th>Total</th></tr></thead>
                     <tbody>
-                        ${cartToPrint.map(item => `
-                            <tr>
-                                <td style="padding:8px;">${item.nombre}</td>
-                                <td align="center">${item.qty}</td>
-                                <td align="right">Q${item.precio_venta.toFixed(2)}</td>
-                                <td align="right">Q${(item.precio_venta * item.qty).toFixed(2)}</td>
-                            </tr>
+                        ${saleRow.items.map(item => `
+                            <tr><td style="padding:8px;">${item.producto}</td><td align="center">${item.cantidad}</td><td align="right">Q${item.precioUnitario.toFixed(2)}</td><td align="right">Q${(item.precioUnitario * item.cantidad).toFixed(2)}</td></tr>
                         `).join('')}
                     </tbody>
                 </table>
-                <h2 style="text-align: right; margin-top: 20px;">TOTAL: Q${totalPrint.toFixed(2)}</h2>
+                <h2 style="text-align: right; margin-top: 20px;">TOTAL: Q${saleRow.totalVenta.toFixed(2)}</h2>
             `;
 
-            const finalHtml = `<html><head><style>${esCarta ? estilosCarta : estilos80mm}</style></head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`;
-            printWindow.document.write(finalHtml);
+            printWindow.document.write(`<html><head>${esCarta ? estilosCarta : estilos80mm}</head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`);
             printWindow.document.close();
-            setTimeout(() => { printWindow.print(); printWindow.close(); }, 800);
+
+            // Esperar a que el logo cargue antes de imprimir
+            const img = printWindow.document.querySelector('img');
+            if (img) {
+                img.onload = () => { printWindow.print(); printWindow.close(); };
+                setTimeout(() => { if(!printWindow.closed) { printWindow.print(); printWindow.close(); } }, 2000);
+            } else {
+                setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+            }
 
         } catch (e) {
+            console.error(e);
             alert("Error al imprimir.");
         }
     };
 
     return (
         <Paper sx={{ width: '100%', overflow: 'hidden', p: 3, borderRadius: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3, color: '#1a237e' }}>
-                📜 Historial de Ventas
-            </Typography>
-
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3, color: '#1a237e' }}>📜 Historial de Ventas</Typography>
             {loading && <Box display="flex" justifyContent="center"><CircularProgress /></Box>}
             {error && <Alert severity="error">{error}</Alert>}
-
             {!loading && !error && (
                 <TableContainer sx={{ maxHeight: '75vh' }}>
-                    <Table stickyHeader>
+                    <Table stickyHeader size="small">
                         <TableHead>
                             <TableRow>
                                 <TableCell width="40px" />
