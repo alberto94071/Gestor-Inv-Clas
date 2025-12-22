@@ -263,7 +263,7 @@ router.post('/config/ticket', authenticateToken, checkAdminRole, async (req, res
 });
 
 // =====================================================================
-// 8. HISTORIAL DE VENTAS (CORREGIDO)
+// 8. HISTORIAL DE VENTAS (ACTUALIZADO CON COALESCE)
 // =====================================================================
 router.get('/sales-history', authenticateToken, async (req, res) => {
     try {
@@ -276,7 +276,8 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
                 h.total_venta as totalVenta,
                 p.nombre as producto,
                 p.codigo_barras as codigo,
-                u.nombre as vendedor
+                -- 🟢 FIX: Si el vendedor es null, devuelve 'Sistema'
+                COALESCE(u.nombre, 'Sistema') as vendedor
             FROM historial_ventas h
             JOIN productos p ON h.producto_id = p.id
             LEFT JOIN usuarios u ON h.user_id = u.id
@@ -287,10 +288,43 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
         return res.json(result.rows);
     } catch (err) {
         console.error("Error al obtener historial:", err);
-        // Validamos si no se ha enviado respuesta para evitar el error ERR_HTTP_HEADERS_SENT
         if (!res.headersSent) {
             return res.status(500).json({ error: "Error del servidor al cargar historial" });
         }
+    }
+});
+
+// =====================================================================
+// 9. RUTAS EXTRA PARA ADMIN TOOLS (NECESARIAS PARA QUE NO FALLE)
+// =====================================================================
+
+// Reporte de productos estancados (más de 3 meses sin moverse)
+router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, res) => {
+    try {
+        // Nota: Asume que tienes fecha_creacion en productos. Si no, usa NOW()
+        const query = `
+            SELECT nombre, cantidad, fecha_creacion 
+            FROM productos 
+            WHERE fecha_creacion < NOW() - INTERVAL '3 months' 
+            AND cantidad > 0
+            ORDER BY fecha_creacion ASC
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al generar reporte" });
+    }
+});
+
+// Limpieza de historial antiguo (más de 1 mes)
+router.delete('/sales/cleanup', authenticateToken, checkAdminRole, async (req, res) => {
+    try {
+        await db.query("DELETE FROM historial_ventas WHERE fecha_venta < NOW() - INTERVAL '1 month'");
+        res.json({ message: "Limpieza completada" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al limpiar base de datos" });
     }
 });
 
