@@ -23,7 +23,6 @@ const StatsDashboard = () => {
     const [userRole, setUserRole] = useState('');
     
     // 🟢 ESTADO PARA CORREGIR ERROR DE ANCHO/ALTO (-1)
-    // Solo renderizamos la gráfica cuando el componente ya se montó en pantalla
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -89,11 +88,11 @@ const StatsDashboard = () => {
         return new Date(dateString);
     };
 
-    // 2. Calcular Estadísticas
+    // 2. Calcular Estadísticas (AQUÍ ESTÁ LA NUEVA LÓGICA)
     const stats = useMemo(() => {
         if (!inventory.length) return { totalProducts: 0, totalValue: 0, lowStockItems: 0, chartData: [], salesData: [] };
 
-        // KPI: Inventario
+        // --- KPI: Inventario ---
         const totalProducts = inventory.length;
         const totalValue = inventory.reduce((acc, item) => {
             const precio = parseFloat(item.precio_venta) || 0;
@@ -102,7 +101,7 @@ const StatsDashboard = () => {
         }, 0);
         const lowStockItems = inventory.filter(item => (parseInt(item.cantidad) || 0) < 5).length;
         
-        // GRÁFICA 1: STOCK POR MARCA
+        // --- GRÁFICA 1: STOCK POR MARCA ---
         const brandMap = {};
         inventory.forEach(item => {
             const brand = item.marca ? item.marca.toUpperCase() : 'OTROS';
@@ -115,20 +114,36 @@ const StatsDashboard = () => {
             stock: brandMap[key]
         })).sort((a, b) => b.stock - a.stock).slice(0, 8); 
 
-        // GRÁFICA 2: VENTAS POR DÍA (Usando parseCustomDate)
+        // --- GRÁFICA 2: VENTAS DE LA SEMANA ACTUAL (Lunes a Domingo) ---
         const daysMap = {
             'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0, 'Domingo': 0
         };
 
+        // 1. Calcular el Lunes de esta semana (00:00:00)
+        const today = new Date();
+        const currentDay = today.getDay(); // 0 (Dom) - 6 (Sab)
+        // Ajuste: Si es Domingo (0), restamos 6 días para llegar al Lunes. Si no, restamos (dia - 1).
+        const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1); 
+        const mondayOfThisWeek = new Date(today.setDate(diff));
+        mondayOfThisWeek.setHours(0, 0, 0, 0);
+
         salesHistory.forEach(sale => {
-            if (sale.fecha_hora) {
-                const date = parseCustomDate(sale.fecha_hora);
-                const dayIndex = date.getDay(); // 0 = Domingo
-                const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-                const dayName = dayNames[dayIndex];
+            // Soportar ambos nombres de campo por compatibilidad
+            const rawDate = sale.fecha_hora || sale.fecha_venta;
+            
+            if (rawDate) {
+                const date = parseCustomDate(rawDate);
                 
-                if (daysMap[dayName] !== undefined) {
-                    daysMap[dayName] += parseFloat(sale.totalVenta || (sale.precio_unitario * sale.cantidad));
+                // 🟢 FILTRO NUEVO: Solo sumar si la venta es >= al Lunes de esta semana
+                if (date >= mondayOfThisWeek) {
+                    const dayIndex = date.getDay(); // 0 = Domingo
+                    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                    const dayName = dayNames[dayIndex];
+                    
+                    if (daysMap[dayName] !== undefined) {
+                        const totalVenta = parseFloat(sale.totalVenta || sale.totalventa || (sale.precio_unitario * sale.cantidad));
+                        daysMap[dayName] += totalVenta;
+                    }
                 }
             }
         });
@@ -230,15 +245,10 @@ const StatsDashboard = () => {
                 <Grid item xs={12} lg={6}>
                     <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
                         <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <ShowChart color="primary" /> Ventas de la Semana
+                            <ShowChart color="primary" /> Ventas de esta Semana
                         </Typography>
                         <Divider sx={{ mb: 3 }} />
                         
-                        {/* 🟢 SOLUCIÓN DEFINITIVA WIDTH(-1): 
-                           1. Usamos div normal (no Box).
-                           2. Width 99% (truco para evitar colisión Flex).
-                           3. Renderizado condicional {mounted && ...}
-                        */}
                         <div style={{ width: '99%', height: 350 }}> 
                             {mounted && (
                                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
