@@ -12,15 +12,25 @@ import PointOfSale from './components/PointOfSale';
 import Reports from './components/Reports';
 import Users from './components/Users';
 import AuditLog from './components/AuditLog';
-import AdminTools from './components/AdminTools'; // 🟢 1. NUEVO COMPONENTE
+import AdminTools from './components/AdminTools';
+import Footer from './components/Footer'; // 🟢 1. IMPORTAMOS EL FOOTER
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // 1. Verificar si hay sesión guardada al iniciar la app
+    // 1. Verificar sesión y Firma de Autoría
     useEffect(() => {
+        // --- FIRMA DEL DESARROLLADOR EN CONSOLA (Hacker style) ---
+        console.log(
+            "%c Desarrollado por Rony Alberto Méndez Fuentes %c v1.0 ",
+            "color: white; background: #1565c0; padding: 5px; border-radius: 3px 0 0 3px; font-weight: bold;",
+            "color: white; background: #333; padding: 5px; border-radius: 0 3px 3px 0;"
+        );
+        console.log("Universidad Mariano Gálvez de Guatemala - Ingeniería en Sistemas");
+        // ---------------------------------------------------------
+
         const checkAuth = () => {
             const token = localStorage.getItem('authToken');
             const storedUser = localStorage.getItem('user');
@@ -37,13 +47,11 @@ function App() {
         checkAuth();
     }, []);
 
-    // 2. Función para Iniciar Sesión (Se pasa a Login.jsx)
     const handleLogin = (userData) => {
         setIsAuthenticated(true);
         setUser(userData);
     };
 
-    // 3. Función para Cerrar Sesión (Se pasa a Sidebar.jsx)
     const handleLogout = () => {
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
@@ -51,7 +59,6 @@ function App() {
         setUser(null);
     };
 
-    // Mostrar spinner mientras verificamos el token
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -63,55 +70,70 @@ function App() {
     return (
         <Router>
             <CssBaseline />
-            <Box sx={{ display: 'flex' }}>
+            {/* Contenedor Flex para que el Footer siempre quede al final */}
+            <Box sx={{ display: 'flex', minHeight: '100vh' }}>
                 
-                {/* Si está autenticado, mostramos el Sidebar */}
+                {/* Sidebar solo si está logueado */}
                 {isAuthenticated && (
                     <Sidebar handleLogout={handleLogout} user={user} />
                 )}
 
-                {/* Contenedor Principal */}
-                <Box component="main" sx={{ flexGrow: 1, p: 3, width: '100%', overflowX: 'hidden' }}>
-                    <Routes>
-                        {/* RUTA DE LOGIN */}
-                        <Route 
-                            path="/login" 
-                            element={
-                                !isAuthenticated ? (
-                                    <Login handleLogin={handleLogin} /> 
-                                ) : (
-                                    <Navigate to="/" />
-                                )
-                            } 
-                        />
+                {/* 🟢 AJUSTE DE DISEÑO:
+                    Convertimos el main en una columna flex.
+                    El primer Box (contenido) tiene flexGrow: 1 para ocupar todo el espacio disponible.
+                    El Footer queda al final.
+                */}
+                <Box component="main" sx={{ 
+                    flexGrow: 1, 
+                    width: '100%', 
+                    overflowX: 'hidden',
+                    display: 'flex', 
+                    flexDirection: 'column' 
+                }}>
+                    
+                    {/* Área de Contenido (Rutas) con Padding */}
+                    <Box sx={{ flexGrow: 1, p: 3 }}>
+                        <Routes>
+                            {/* RUTA DE LOGIN */}
+                            <Route 
+                                path="/login" 
+                                element={
+                                    !isAuthenticated ? (
+                                        <Login handleLogin={handleLogin} /> 
+                                    ) : (
+                                        <Navigate to="/" />
+                                    )
+                                } 
+                            />
 
-                        {/* RUTAS PROTEGIDAS */}
-                        {isAuthenticated ? (
-                            <>
-                                <Route path="/" element={<StatsDashboard />} />
-                                <Route path="/inventory" element={<InventoryDashboard />} />
-                                <Route path="/pos" element={<PointOfSale />} />
-                                
-                                {/* Rutas solo para Admin */}
-                                {user?.rol === 'admin' && (
-                                    <>
-                                        <Route path="/reports" element={<Reports />} />
-                                        <Route path="/users" element={<Users />} />
-                                        <Route path="/audit" element={<AuditLog />} />
-                                        
-                                        {/* 🟢 2. NUEVA RUTA DE CONFIGURACIÓN */}
-                                        <Route path="/admin-tools" element={<AdminTools />} />
-                                    </>
-                                )}
-                                
-                                {/* Si intenta ir a una ruta no definida, va al inicio */}
-                                <Route path="*" element={<Navigate to="/" />} />
-                            </>
-                        ) : (
-                            // Si no está autenticado, cualquier ruta lo manda al login
-                            <Route path="*" element={<Navigate to="/login" />} />
-                        )}
-                    </Routes>
+                            {/* RUTAS PROTEGIDAS */}
+                            {isAuthenticated ? (
+                                <>
+                                    <Route path="/" element={<StatsDashboard />} />
+                                    <Route path="/inventory" element={<InventoryDashboard />} />
+                                    <Route path="/pos" element={<PointOfSale />} />
+                                    
+                                    {/* Rutas solo para Admin */}
+                                    {user?.rol === 'admin' && (
+                                        <>
+                                            <Route path="/reports" element={<Reports />} />
+                                            <Route path="/users" element={<Users />} />
+                                            <Route path="/audit" element={<AuditLog />} />
+                                            <Route path="/admin-tools" element={<AdminTools />} />
+                                        </>
+                                    )}
+                                    
+                                    <Route path="*" element={<Navigate to="/" />} />
+                                </>
+                            ) : (
+                                <Route path="*" element={<Navigate to="/login" />} />
+                            )}
+                        </Routes>
+                    </Box>
+
+                    {/* 🟢 2. AQUÍ VA EL FOOTER (Siempre al final) */}
+                    <Footer />
+
                 </Box>
             </Box>
         </Router>
