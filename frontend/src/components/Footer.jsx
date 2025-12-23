@@ -21,7 +21,7 @@ const Footer = () => {
                 <Link color="inherit" href="#" sx={{ fontWeight: 'bold', textDecoration: 'none' }}>
                     Rony Alberto Méndez Fuentes
                 </Link>
-                {' | Ingeniería en Sistemas UMG'}
+                {' |'}
             </Typography>
         </Box>
     );
