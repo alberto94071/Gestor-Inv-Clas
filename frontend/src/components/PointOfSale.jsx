@@ -13,7 +13,7 @@ import API from '../api/axiosInstance';
 // Helper moneda
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// URLs de iconos (Usamos imágenes directas para asegurar que salgan en la impresión)
+// URLs de iconos
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
@@ -27,7 +27,7 @@ const PointOfSale = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMsg, setSuccessMsg] = useState(null);
-    const [ticketConfig, setTicketConfig] = useState({}); // Nuevo estado para config
+    const [ticketConfig, setTicketConfig] = useState({}); 
     
     // Guardar última venta
     const [lastSaleCart, setLastSaleCart] = useState(null);
@@ -55,7 +55,6 @@ const PointOfSale = () => {
         }
     };
 
-    // Nueva función para cargar la config del ticket al inicio
     const fetchTicketConfig = async () => {
         try {
             const token = localStorage.getItem('authToken');
@@ -66,7 +65,7 @@ const PointOfSale = () => {
 
     useEffect(() => {
         loadInventory();
-        fetchTicketConfig(); // Cargamos configuración
+        fetchTicketConfig(); 
         focusInput();
         
         // Lógica de carrito persistente
@@ -158,7 +157,6 @@ const PointOfSale = () => {
         try {
             const token = localStorage.getItem('authToken');
             
-            // Mantenemos tu bucle original para asegurar compatibilidad
             for (const item of cart) {
                 await API.post('/inventory/scan-out', {
                     codigo_barras: item.codigo_barras,
@@ -173,7 +171,6 @@ const PointOfSale = () => {
             setLastSaleCart(currentCart);
             setLastTicketId(ticketId);
 
-            // Imprimir automáticamente pasando el usuario actual
             await handlePrintTicket(currentCart, ticketId, currentUser);
 
             setSuccessMsg("¡Venta registrada con éxito!");
@@ -189,12 +186,11 @@ const PointOfSale = () => {
         }
     };
 
-    // --- IMPRESIÓN (MEJORADA Y DEFINITIVA) ---
+    // --- IMPRESIÓN (LÓGICA MEJORADA PARA ICONOS) ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now(), vendedorName = currentUser) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
         try {
-            // Usamos el estado ticketConfig que ya cargamos al inicio (más rápido)
             const config = ticketConfig; 
             const esCarta = (config.tipo_papel || '').toLowerCase() === 'carta';
             
@@ -208,7 +204,7 @@ const PointOfSale = () => {
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
                 : '';
 
-            // ================= ESTILOS 80MM (PROFESIONAL) =================
+            // ================= ESTILOS 80MM =================
             const estilos80mm = `
                 <style>
                     @page { size: 80mm auto; margin: 0; }
@@ -221,17 +217,14 @@ const PointOfSale = () => {
                     .divider { border-top: 1px dashed #000; margin: 6px 0; }
                     .info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
                     
-                    /* Logo ajustado */
                     #logo-img { display: block; margin: 5px auto; width: 40mm; height: auto; object-fit: contain; }
                     
-                    /* Redes Sociales y QR Mini */
                     .socials-container { margin-top: 10px; padding-top: 5px; border-top: 1px dotted #000; }
                     .social-item-mini { display: flex; align-items: center; justify-content: center; margin-bottom: 3px; font-size: 10px; }
-                    .social-icon-mini { width: 14px; height: 14px; margin-right: 5px; }
+                    .social-icon-mini { width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
                     .qr-mini { width: 35mm; height: 35mm; margin: 5px auto 0 auto; display: block; }
                     .wp-icon { width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; }
                     
-                    /* Tabla */
                     table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; font-size: 11px; }
                     th { text-align: left; border-bottom: 1px dashed #000; padding: 3px 0; }
                     td { vertical-align: top; padding: 3px 0; }
@@ -282,7 +275,7 @@ const PointOfSale = () => {
                 <div class="center bold" style="margin-top: 10px; font-size: 12px;">${config.mensaje_final || "¡GRACIAS!"}</div>
             `;
 
-            // ================= ESTILOS CARTA (Resumido para POS) =================
+            // ================= ESTILOS CARTA =================
             const estilosCarta = `<style>body{font-family:sans-serif;padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;}</style>`;
             const contenidoCarta = `
                 <div class="header"><h1>Recibo de Venta</h1></div>
@@ -297,21 +290,53 @@ const PointOfSale = () => {
                 <h2 style="text-align:right;">Total: Q${totalPrint.toFixed(2)}</h2>
             `;
 
-            // INYECCIÓN HTML
             const html = `<html><head><title>Ticket ${ticketId}</title><style>${esCarta ? estilosCarta : estilos80mm}</style></head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`;
 
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // Espera de imágenes (Logo + QR)
-            const logoEl = printWindow.document.getElementById('logo-img');
-            if (!esCarta && logoEl && config.logo_url) {
-                logoEl.onload = () => { printWindow.focus(); printWindow.print(); printWindow.close(); };
-                logoEl.onerror = () => { printWindow.print(); printWindow.close(); };
-                setTimeout(() => { if (!printWindow.closed) { printWindow.print(); printWindow.close(); } }, 2000);
-            } else {
-                setTimeout(() => { printWindow.focus(); printWindow.print(); printWindow.close(); }, 800);
-            }
+            // 🟢 LÓGICA DE ESPERA BLINDADA: Espera todas las imágenes, no solo el logo
+            const waitForImagesAndPrint = () => {
+                const images = printWindow.document.images;
+                let loadedCount = 0;
+                const totalImages = images.length;
+
+                if (totalImages === 0) {
+                    printWindow.print();
+                    printWindow.close();
+                    return;
+                }
+
+                const checkAllLoaded = () => {
+                    loadedCount++;
+                    if (loadedCount >= totalImages) {
+                        printWindow.focus();
+                        printWindow.print();
+                        printWindow.close();
+                    }
+                };
+
+                for (let i = 0; i < totalImages; i++) {
+                    if (images[i].complete) {
+                        checkAllLoaded();
+                    } else {
+                        images[i].onload = checkAllLoaded;
+                        images[i].onerror = checkAllLoaded; // Si falla uno, imprimir igual
+                    }
+                }
+            };
+
+            // Ejecutamos la espera (con un pequeño delay inicial para asegurar DOM)
+            setTimeout(waitForImagesAndPrint, 100);
+
+            // Timeout de seguridad: Si en 3 seg no ha impreso, forzar impresión
+            setTimeout(() => {
+                if (!printWindow.closed) {
+                    printWindow.focus();
+                    printWindow.print();
+                    printWindow.close();
+                }
+            }, 3000);
 
         } catch (e) {
             console.error(e);
@@ -319,7 +344,7 @@ const PointOfSale = () => {
         }
     };
 
-    // Atajos de Teclado
+    // Atajos
     useEffect(() => {
         const handleKeyDown = (event) => {
             if (document.activeElement.tagName === 'INPUT' && document.activeElement !== inputRef.current) return;
@@ -330,7 +355,6 @@ const PointOfSale = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [cart]); 
 
-    // --- INTERFAZ GRÁFICA ---
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
