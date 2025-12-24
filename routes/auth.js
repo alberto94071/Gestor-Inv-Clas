@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // Asegúrate de tener instalado bcryptjs
+const bcrypt = require('bcryptjs'); 
 const db = require('../db/db');
 
 // ---------------------------------------------------------------------
@@ -11,14 +11,13 @@ const db = require('../db/db');
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
-    // Validación básica de entrada
+    // Validación básica
     if (!email || !password) {
         return res.status(400).json({ error: 'Por favor ingrese email y contraseña.' });
     }
 
     try {
-        // 1. Buscar el usuario en la base de datos
-        // Usamos la tabla 'usuarios' (en español)
+        // 1. Buscar el usuario
         const result = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
         
         if (result.rows.length === 0) {
@@ -27,40 +26,78 @@ router.post('/login', async (req, res) => {
 
         const user = result.rows[0];
 
-        // 2. Verificar la contraseña encriptada
-        const match = await bcrypt.compare(password, user.password_hash);
+        // 🛑 CORRECCIÓN CRÍTICA AQUÍ:
+        // En la base de datos la columna se llama 'password', no 'password_hash'
+        if (!user.password) {
+            console.error("Error: El usuario existe pero no tiene contraseña en BD");
+            return res.status(500).json({ error: 'Error de integridad de datos.' });
+        }
+
+        // 2. Verificar la contraseña
+        const match = await bcrypt.compare(password, user.password);
         
         if (!match) {
             return res.status(401).json({ error: 'Credenciales inválidas.' });
         }
 
-        // 3. Generar el Token de Acceso (JWT)
-        // 🛑 CRÍTICO: Usamos la clave 'userId' para que coincida con lo que espera inventory.js
+        // 3. Generar Token (JWT)
         const token = jwt.sign(
             { 
-                userId: user.id,   // <--- ESTO ARREGLA LA VENTA
-                rol: user.rol,     // <--- ESTO SIRVE PARA LOS PERMISOS
+                userId: user.id,   
+                rol: user.rol,     
                 nombre: user.nombre 
             }, 
-            process.env.JWT_SECRET, 
-            { expiresIn: '12h' } // Token válido por 12 horas
+            process.env.JWT_SECRET || 'secreto_temporal', // Fallback por seguridad 
+            { expiresIn: '12h' }
         );
         
-        // 4. Enviar respuesta al Frontend
-        // Enviamos el usuario explícitamente para guardarlo en localStorage (para el botón eliminar)
+        // 4. Respuesta
         res.json({ 
             token, 
             user: { 
                 id: user.id,
                 nombre: user.nombre, 
-                rol: user.rol,      // <--- ESTO HACE APARECER EL BOTÓN ELIMINAR
+                rol: user.rol,       
                 email: user.email
             } 
         });
 
     } catch (error) {
         console.error('Error en el login:', error);
-        res.status(500).json({ error: 'Error interno del servidor durante la autenticación.' });
+        res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+});
+
+// ---------------------------------------------------------------------
+// REGISTRO DE USUARIO (POST /register) - ¡NUEVO!
+// Úsalo para crear tu primer Admin en Neon
+// ---------------------------------------------------------------------
+router.post('/register', async (req, res) => {
+    const { nombre, email, password, rol } = req.body;
+
+    if (!nombre || !email || !password) {
+        return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    try {
+        // 1. Encriptar contraseña
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+
+        // 2. Insertar en Neon
+        const result = await db.query(
+            'INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol',
+            [nombre, email, hash, rol || 'usuario']
+        );
+
+        res.status(201).json({ message: "Usuario creado exitosamente", user: result.rows[0] });
+
+    } catch (error) {
+        console.error("Error en registro:", error);
+        if (error.code === '23505') { // Código de error PostgreSQL para "Unique violation"
+            return res.status(400).json({ error: "El email ya está registrado" });
+        }
+        res.status(500).json({ error: "Error al crear usuario" });
     }
 });
 
