@@ -11,13 +11,11 @@ const db = require('../db/db');
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
-    // Validación básica
     if (!email || !password) {
         return res.status(400).json({ error: 'Por favor ingrese email y contraseña.' });
     }
 
     try {
-        // 1. Buscar el usuario
         const result = await db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
         
         if (result.rows.length === 0) {
@@ -26,38 +24,38 @@ router.post('/login', async (req, res) => {
 
         const user = result.rows[0];
 
-        // 🛑 CORRECCIÓN CRÍTICA AQUÍ:
-        // En la base de datos la columna se llama 'password', no 'password_hash'
-        if (!user.password) {
-            console.error("Error: El usuario existe pero no tiene contraseña en BD");
-            return res.status(500).json({ error: 'Error de integridad de datos.' });
+        // 🛑 VALIDACIÓN DE SEGURIDAD
+        // Aseguramos que el usuario tenga contraseña en la BD para evitar errores
+        if (!user.password_hash) {
+            console.error("Usuario sin hash en BD:", user.email);
+            return res.status(500).json({ error: 'Error de datos en el usuario.' });
         }
 
-        // 2. Verificar la contraseña
-        const match = await bcrypt.compare(password, user.password);
+        // 2. Verificar la contraseña encriptada (Usando password_hash como en tus fotos)
+        const match = await bcrypt.compare(password, user.password_hash);
         
         if (!match) {
             return res.status(401).json({ error: 'Credenciales inválidas.' });
         }
 
-        // 3. Generar Token (JWT)
+        // 3. Generar el Token
         const token = jwt.sign(
             { 
                 userId: user.id,   
                 rol: user.rol,     
                 nombre: user.nombre 
             }, 
-            process.env.JWT_SECRET || 'secreto_temporal', // Fallback por seguridad 
+            process.env.JWT_SECRET || 'secreto_super_seguro', 
             { expiresIn: '12h' }
         );
         
-        // 4. Respuesta
+        // 4. Enviar respuesta
         res.json({ 
             token, 
             user: { 
                 id: user.id,
                 nombre: user.nombre, 
-                rol: user.rol,       
+                rol: user.rol,
                 email: user.email
             } 
         });
@@ -69,8 +67,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// REGISTRO DE USUARIO (POST /register) - ¡NUEVO!
-// Úsalo para crear tu primer Admin en Neon
+// REGISTRO (POST /register) - NECESARIO PARA NEON
 // ---------------------------------------------------------------------
 router.post('/register', async (req, res) => {
     const { nombre, email, password, rol } = req.body;
@@ -84,17 +81,17 @@ router.post('/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
 
-        // 2. Insertar en Neon
+        // 2. Insertar en la BD usando la columna correcta: password_hash
         const result = await db.query(
-            'INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol',
+            'INSERT INTO usuarios (nombre, email, password_hash, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol',
             [nombre, email, hash, rol || 'usuario']
         );
 
-        res.status(201).json({ message: "Usuario creado exitosamente", user: result.rows[0] });
+        res.status(201).json({ message: "Usuario creado", user: result.rows[0] });
 
     } catch (error) {
         console.error("Error en registro:", error);
-        if (error.code === '23505') { // Código de error PostgreSQL para "Unique violation"
+        if (error.code === '23505') { 
             return res.status(400).json({ error: "El email ya está registrado" });
         }
         res.status(500).json({ error: "Error al crear usuario" });
