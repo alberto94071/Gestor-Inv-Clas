@@ -14,7 +14,7 @@ const app = express();
 
 // --- 1. Configuración de CORS ---
 app.use(cors({
-    origin: 'https://gestor-inv-clas.pages.dev',
+    origin: 'https://gestor-inv-clas.pages.dev', // Tu frontend en Cloudflare
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -44,12 +44,20 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/reports', reportRoutes);
 
 // 🟢 CORRECCIÓN AQUÍ: Cambiamos 'Users' (mayúscula) por 'users' (minúscula)
-// Esto debe coincidir exactamente con lo que pide tu frontend
 app.use('/api/users', usersRoutes); 
 
 // --- Manejo de la Raíz ---
 app.get('/', (req, res) => {
     res.send('Servidor de Gestión de Inventario de Ropa (Backend activo)');
+});
+
+// =====================================================
+// 🟢 RUTA PARA EL CRON-JOB (Keep-Alive)
+// Esta ruta sirve para que cron-job.org despierte al servidor cada 14 min
+// =====================================================
+app.get('/health', (req, res) => {
+    console.log('Ping de reactivación recibido 🤖');
+    res.status(200).send('El servidor está despierto y listo 🚀');
 });
 
 // --- 4. Iniciar el Servidor ---
