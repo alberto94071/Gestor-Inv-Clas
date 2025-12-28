@@ -16,7 +16,7 @@ const AuditLog = () => {
         const fetchLog = async () => {
             try {
                 const token = localStorage.getItem('authToken');
-                // Asegúrate de que esta ruta coincida con tu backend
+                // La ruta base ya incluye '/api', así que solo agregamos el resto
                 const response = await API.get('/reports/audit-log', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -30,6 +30,26 @@ const AuditLog = () => {
         };
         fetchLog();
     }, []);
+
+    // Función auxiliar para formatear la fecha blindada contra errores de zona horaria
+    const formatearFecha = (fechaString) => {
+        if (!fechaString) return 'Fecha inválida';
+        
+        // TRUCO: Si la fecha viene sin 'Z' (indicador UTC), se la agregamos a la fuerza.
+        // Esto obliga al navegador a entender que la hora viene de Londres 
+        // y debe restarle 6 horas para Guatemala.
+        const fechaSegura = fechaString.endsWith('Z') ? fechaString : fechaString + 'Z';
+        
+        return new Date(fechaSegura).toLocaleString('es-GT', {
+            timeZone: 'America/Guatemala',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
 
     if (loading) return <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>;
     if (error) return <Alert severity="error">{error}</Alert>;
@@ -62,22 +82,12 @@ const AuditLog = () => {
                                     <TableRow key={item.id} hover>
                                         <TableCell>{item.id}</TableCell>
                                         
-                                        {/* 🟢 CORRECCIÓN DE HORA APLICADA AQUÍ */}
-                                        <TableCell>
-                                            {new Date(item.fecha_registro).toLocaleString('es-GT', {
-                                                timeZone: 'America/Guatemala',
-                                                year: 'numeric',
-                                                month: '2-digit',
-                                                day: '2-digit',
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                hour12: true
-                                            })}
-                                        </TableCell>
+                                        {/* Usamos la función corregida aquí */}
+                                        <TableCell>{formatearFecha(item.fecha_registro)}</TableCell>
 
                                         <TableCell>{item.username || 'Sistema'}</TableCell>
                                         
-                                        {/* Protección para evitar error si rol viene null */}
+                                        {/* Protección por si el rol viene vacío */}
                                         <TableCell>{item.rol ? item.rol.toUpperCase() : 'N/A'}</TableCell>
                                         
                                         <TableCell sx={{ fontWeight: 'bold' }}>{item.accion}</TableCell>
