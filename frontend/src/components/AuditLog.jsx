@@ -16,7 +16,7 @@ const AuditLog = () => {
         const fetchLog = async () => {
             try {
                 const token = localStorage.getItem('authToken');
-                // La ruta base ya incluye '/api', así que solo agregamos el resto
+                // Asumimos que tu axiosInstance ya tiene /api base
                 const response = await API.get('/reports/audit-log', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -31,24 +31,37 @@ const AuditLog = () => {
         fetchLog();
     }, []);
 
-    // Función auxiliar para formatear la fecha blindada contra errores de zona horaria
-    const formatearFecha = (fechaString) => {
-        if (!fechaString) return 'Fecha inválida';
+    // 🟢 FUNCIÓN DE FECHA CORREGIDA (VERSIÓN 2.0)
+    const formatearFecha = (fecha) => {
+        if (!fecha) return '---';
         
-        // TRUCO: Si la fecha viene sin 'Z' (indicador UTC), se la agregamos a la fuerza.
-        // Esto obliga al navegador a entender que la hora viene de Londres 
-        // y debe restarle 6 horas para Guatemala.
-        const fechaSegura = fechaString.endsWith('Z') ? fechaString : fechaString + 'Z';
-        
-        return new Date(fechaSegura).toLocaleString('es-GT', {
-            timeZone: 'America/Guatemala',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
+        // 1. Convertimos a texto por seguridad
+        let fechaStr = String(fecha);
+
+        // 2. Si viene formato SQL con espacio ("2025-01-01 10:00"), lo cambiamos a ISO ("2025-01-01T10:00")
+        if (fechaStr.includes(' ')) {
+            fechaStr = fechaStr.replace(' ', 'T');
+        }
+
+        // 3. Si no trae la Z de Zulu Time (UTC), se la pegamos.
+        // Esto obliga a JS a tratar la hora como UTC y restarle las 6 horas de Guate.
+        if (!fechaStr.endsWith('Z')) {
+            fechaStr += 'Z';
+        }
+
+        try {
+            return new Date(fechaStr).toLocaleString('es-GT', {
+                timeZone: 'America/Guatemala',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (error) {
+            return fecha; // Fallback por si acaso
+        }
     };
 
     if (loading) return <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>;
@@ -82,14 +95,13 @@ const AuditLog = () => {
                                     <TableRow key={item.id} hover>
                                         <TableCell>{item.id}</TableCell>
                                         
-                                        {/* Usamos la función corregida aquí */}
-                                        <TableCell>{formatearFecha(item.fecha_registro)}</TableCell>
+                                        {/* Usamos la nueva función blindada */}
+                                        <TableCell sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                                            {formatearFecha(item.fecha_registro)}
+                                        </TableCell>
 
                                         <TableCell>{item.username || 'Sistema'}</TableCell>
-                                        
-                                        {/* Protección por si el rol viene vacío */}
                                         <TableCell>{item.rol ? item.rol.toUpperCase() : 'N/A'}</TableCell>
-                                        
                                         <TableCell sx={{ fontWeight: 'bold' }}>{item.accion}</TableCell>
                                         <TableCell>{item.entidad_afectada}</TableCell>
                                     </TableRow>
