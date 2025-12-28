@@ -16,7 +16,6 @@ const AuditLog = () => {
         const fetchLog = async () => {
             try {
                 const token = localStorage.getItem('authToken');
-                // Asumimos que tu axiosInstance ya tiene /api base
                 const response = await API.get('/reports/audit-log', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -31,37 +30,28 @@ const AuditLog = () => {
         fetchLog();
     }, []);
 
-    // 🟢 FUNCIÓN DE FECHA CORREGIDA (VERSIÓN 2.0)
+    // 🟢 FUNCIÓN MATEMÁTICA (FUERZA BRUTA)
+    // Si la hora sale adelantada 6 horas, aquí se las restamos a la fuerza.
     const formatearFecha = (fecha) => {
         if (!fecha) return '---';
         
-        // 1. Convertimos a texto por seguridad
-        let fechaStr = String(fecha);
+        // 1. Crear el objeto fecha con lo que venga
+        const fechaObj = new Date(fecha);
+        
+        // 2. RESTAR 6 HORAS MANUALMENTE
+        // Si el servidor dice "12:00" (UTC), le quitamos 6 para que diga "06:00" (Guate)
+        // Nota: setHours es inteligente, si restas y cambia de día, él ajusta la fecha solo.
+        fechaObj.setHours(fechaObj.getHours() - 6);
 
-        // 2. Si viene formato SQL con espacio ("2025-01-01 10:00"), lo cambiamos a ISO ("2025-01-01T10:00")
-        if (fechaStr.includes(' ')) {
-            fechaStr = fechaStr.replace(' ', 'T');
-        }
-
-        // 3. Si no trae la Z de Zulu Time (UTC), se la pegamos.
-        // Esto obliga a JS a tratar la hora como UTC y restarle las 6 horas de Guate.
-        if (!fechaStr.endsWith('Z')) {
-            fechaStr += 'Z';
-        }
-
-        try {
-            return new Date(fechaStr).toLocaleString('es-GT', {
-                timeZone: 'America/Guatemala',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        } catch (error) {
-            return fecha; // Fallback por si acaso
-        }
+        // 3. Formatear bonito para Guatemala
+        return fechaObj.toLocaleString('es-GT', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     };
 
     if (loading) return <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>;
@@ -80,7 +70,7 @@ const AuditLog = () => {
                         <TableHead>
                             <TableRow sx={{ backgroundColor: '#f0f0f0' }}>
                                 <TableCell>ID</TableCell>
-                                <TableCell>Fecha (Guatemala)</TableCell>
+                                <TableCell>Fecha</TableCell>
                                 <TableCell>Usuario</TableCell>
                                 <TableCell>Rol</TableCell>
                                 <TableCell>Acción Detallada</TableCell>
@@ -95,7 +85,7 @@ const AuditLog = () => {
                                     <TableRow key={item.id} hover>
                                         <TableCell>{item.id}</TableCell>
                                         
-                                        {/* Usamos la nueva función blindada */}
+                                        {/* Usamos la función de resta manual */}
                                         <TableCell sx={{ fontWeight: 'bold', color: '#1976d2' }}>
                                             {formatearFecha(item.fecha_registro)}
                                         </TableCell>
