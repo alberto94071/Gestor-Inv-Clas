@@ -2,17 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Paper, Typography, Table, TableBody, TableCell, 
     TableContainer, TableHead, TableRow, IconButton, Collapse, 
-    Button, Chip, CircularProgress, Alert 
+    Button, Chip, CircularProgress, Alert, Avatar 
 } from '@mui/material';
 import { 
     KeyboardArrowDown, KeyboardArrowUp, Print, 
-    CalendarMonth, Person
+    CalendarMonth, Person, image
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
+// --- UTILIDADES ---
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// --- ICONOS ---
+// 1. OPTIMIZADOR DE IMÁGENES (Para que no sea lento)
+const getOptimizedUrl = (url) => {
+    if (!url) return ''; // Retorna vacío si no hay imagen
+    if (url.includes('cloudinary') && url.includes('/upload/')) {
+        return url.replace('/upload/', '/upload/w_100,h_100,c_fill,q_auto,f_auto/');
+    }
+    return url;
+};
+
+// 2. FORMATEADOR DE HORA (BLINDADO PARA GUATEMALA 🇬🇹)
+const formatDateTime = (fecha) => {
+    if (!fecha) return '---';
+    let fechaStr = String(fecha);
+    
+    // Si viene formato SQL con espacio, lo cambiamos a ISO
+    if (fechaStr.includes(' ') && !fechaStr.includes('T')) {
+        fechaStr = fechaStr.replace(' ', 'T');
+    }
+    // Si falta la Z de UTC, la agregamos para forzar la resta de 6 horas
+    if (!fechaStr.endsWith('Z')) {
+        fechaStr += 'Z';
+    }
+
+    try {
+        return new Date(fechaStr).toLocaleString('es-GT', {
+            timeZone: 'America/Guatemala',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: true
+        });
+    } catch (e) {
+        return fecha;
+    }
+};
+
+// --- ICONOS REDES ---
 const ICON_TIKTOK = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png";
 const ICON_FB = "https://cdn-icons-png.flaticon.com/512/124/124010.png";
 const ICON_IG = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png";
@@ -22,8 +57,9 @@ const ICON_WP = "https://cdn-icons-png.flaticon.com/512/733/733585.png";
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
     
-    // 🟢 CORRECCIÓN: Usamos 'row.fecha' que ya fue normalizado en el algoritmo
-    const fechaObj = new Date(row.fecha);
+    // Usamos la fecha ya procesada del grupo
+    const fechaObj = new Date(row.fecha.endsWith('Z') ? row.fecha : row.fecha + 'Z'); 
+    // Generamos referencia visual
     const displayRef = `REF-${fechaObj.getTime().toString().slice(-6)}`;
     const vendedorNombre = row.vendedor || 'Sistema';
 
@@ -35,19 +71,22 @@ const Row = ({ row, onReprint }) => {
                         {open ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                     </IconButton>
                 </TableCell>
+                
+                {/* COLUMNA FECHA Y HORA CORREGIDA */}
                 <TableCell>
                     <Box display="flex" flexDirection="column">
                         <Box display="flex" alignItems="center" gap={1}>
                             <CalendarMonth fontSize="small" color="action" />
                             <Typography variant="body2" fontWeight="bold">
-                                {fechaObj.toLocaleDateString('es-GT')}
+                                {formatDateTime(row.fecha).split(',')[0]} {/* Solo fecha */}
                             </Typography>
                         </Box>
                         <Typography variant="caption" color="textSecondary" sx={{ ml: 3 }}>
-                            {fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {formatDateTime(row.fecha).split(',')[1]} {/* Solo hora */}
                         </Typography>
                     </Box>
                 </TableCell>
+
                 <TableCell>
                     <Chip label={displayRef} size="small" variant="outlined" sx={{fontFamily: 'monospace', fontSize: '0.7rem'}} />
                 </TableCell>
@@ -84,10 +123,14 @@ const Row = ({ row, onReprint }) => {
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
                     <Collapse in={open} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2, padding: 2, backgroundColor: '#fff', borderRadius: 2, border: '1px solid #eee' }}>
+                            <Typography variant="subtitle2" gutterBottom sx={{fontWeight:'bold', color: '#555'}}>
+                                Detalle de Productos Vendidos:
+                            </Typography>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
-                                        <TableCell>Producto</TableCell>
+                                        <TableCell width="60px">Img</TableCell> {/* Nueva Columna */}
+                                        <TableCell>Producto / Detalles</TableCell>
                                         <TableCell align="right">Cant.</TableCell>
                                         <TableCell align="right">P. Unit.</TableCell>
                                         <TableCell align="right">Subtotal</TableCell>
@@ -96,7 +139,36 @@ const Row = ({ row, onReprint }) => {
                                 <TableBody>
                                     {row.items.map((item, index) => (
                                         <TableRow key={index}>
-                                            <TableCell sx={{fontWeight:'bold'}}>{item.producto}</TableCell>
+                                            {/* FOTO DEL PRODUCTO */}
+                                            <TableCell>
+                                                <Avatar 
+                                                    src={getOptimizedUrl(item.imagen_url)} 
+                                                    variant="rounded" 
+                                                    sx={{ width: 40, height: 40 }}
+                                                >
+                                                    P
+                                                </Avatar>
+                                            </TableCell>
+                                            
+                                            {/* NOMBRE Y DETALLES (MARCA, TALLA) */}
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {item.producto}
+                                                </Typography>
+                                                {/* Aquí mostramos los detalles extra si existen */}
+                                                <Box display="flex" gap={1} mt={0.5}>
+                                                    {item.marca && (
+                                                        <Chip label={item.marca} size="small" sx={{height: 20, fontSize: '0.65rem'}} />
+                                                    )}
+                                                    {item.talla && (
+                                                        <Chip label={`Talla: ${item.talla}`} size="small" variant="outlined" sx={{height: 20, fontSize: '0.65rem'}} />
+                                                    )}
+                                                    {item.color && (
+                                                        <Chip label={item.color} size="small" variant="outlined" sx={{height: 20, fontSize: '0.65rem'}} />
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+
                                             <TableCell align="right">{item.cantidad}</TableCell>
                                             <TableCell align="right">{formatCurrency(item.precio_unitario)}</TableCell>
                                             <TableCell align="right">
@@ -139,12 +211,10 @@ const Reports = () => {
         }
     };
 
-    // 🟢 ALGORITMO CORREGIDO PARA CAPTURAR LA FECHA
+    // ALGORITMO INTELIGENTE DE AGRUPACIÓN
     const processSalesSmartly = (flatItems) => {
         if (!flatItems || flatItems.length === 0) return [];
         
-        // Normalizar la fecha. El backend envía 'fecha_hora', pero a veces 'fecha_venta'.
-        // Aquí detectamos cuál existe.
         const sortedItems = [...flatItems].sort((a, b) => {
             const dateA = new Date(a.fecha_hora || a.fecha_venta || new Date());
             const dateB = new Date(b.fecha_hora || b.fecha_venta || new Date());
@@ -155,7 +225,6 @@ const Reports = () => {
         let currentGroup = null;
 
         for (const item of sortedItems) {
-            // Capturamos la fecha real del item
             const rawDate = item.fecha_hora || item.fecha_venta || new Date().toISOString();
             const itemTime = new Date(rawDate).getTime();
 
@@ -172,22 +241,31 @@ const Reports = () => {
                         producto: item.producto,
                         cantidad: item.cantidad,
                         precio_unitario: precio,
+                        // 🟢 AGREGAMOS DATOS EXTRA AQUI
+                        imagen_url: item.imagen_url, 
+                        marca: item.marca,
+                        talla: item.talla,
+                        color: item.color
                     });
                     currentGroup.totalVenta += totalItem;
                     continue; 
                 }
             }
 
-            // Creamos un nuevo grupo con la propiedad estandarizada 'fecha'
             currentGroup = {
                 id: item.id,
-                fecha: rawDate, // <--- AQUÍ GUARDAMOS LA FECHA CORRECTA
+                fecha: rawDate,
                 vendedor: vendedor,
                 totalVenta: totalItem,
                 items: [{
                     producto: item.producto,
                     cantidad: item.cantidad,
                     precio_unitario: precio,
+                    // 🟢 AGREGAMOS DATOS EXTRA AQUI TAMBIEN
+                    imagen_url: item.imagen_url,
+                    marca: item.marca,
+                    talla: item.talla,
+                    color: item.color
                 }]
             };
             groups.push(currentGroup);
@@ -206,9 +284,12 @@ const Reports = () => {
             if (!printWindow) return alert("Permite las ventanas emergentes.");
 
             const totalPrint = saleRow.totalVenta;
-            // 🟢 CORRECCIÓN: Usamos 'saleRow.fecha' que garantizamos en la función processSalesSmartly
-            const fechaVenta = new Date(saleRow.fecha); 
-
+            
+            // Usamos la misma lógica de fecha segura para la impresión
+            const fechaRaw = saleRow.fecha.endsWith('Z') ? saleRow.fecha : saleRow.fecha + 'Z';
+            const fechaVenta = new Date(fechaRaw);
+            // Ajuste manual visual para impresión si fuera necesario, pero Date() suele manejarlo bien con locale
+            
             const qrUrl = config.instagram_url 
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
                 : '';
@@ -253,8 +334,8 @@ const Reports = () => {
                 </div>
                 
                 <div class="divider"></div>
-                <div class="info-row"><span>FECHA:</span> <span>${fechaVenta.toLocaleDateString()}</span></div>
-                <div class="info-row"><span>HORA:</span> <span>${fechaVenta.toLocaleTimeString()}</span></div>
+                <div class="info-row"><span>FECHA:</span> <span>${fechaVenta.toLocaleDateString('es-GT')}</span></div>
+                <div class="info-row"><span>HORA:</span> <span>${fechaVenta.toLocaleTimeString('es-GT', {hour: '2-digit', minute:'2-digit'})}</span></div>
                 <div class="info-row"><span>REF:</span> <span>${displayRef}</span></div>
                 <div class="info-row bold" style="font-size: 12px;"><span>VENDEDOR:</span> <span>${saleRow.vendedor}</span></div>
                 
@@ -331,7 +412,7 @@ const Reports = () => {
                 <div class="info-bar">
                     <span>Ref: ${displayRef}</span>
                     <span>Vendedor: ${saleRow.vendedor}</span>
-                    <span>Fecha: ${fechaVenta.toLocaleDateString()} ${fechaVenta.toLocaleTimeString()}</span>
+                    <span>Fecha: ${fechaVenta.toLocaleDateString('es-GT')} ${fechaVenta.toLocaleTimeString('es-GT')}</span>
                 </div>
                 <table>
                     <thead>
@@ -340,7 +421,7 @@ const Reports = () => {
                     <tbody>
                         ${saleRow.items.map(item => `
                             <tr>
-                                <td>${item.producto}</td>
+                                <td>${item.producto} ${item.marca ? `(${item.marca})` : ''}</td>
                                 <td style="text-align:center">${item.cantidad}</td>
                                 <td style="text-align:right">Q${Number(item.precio_unitario).toFixed(2)}</td>
                                 <td style="text-align:right">Q${(Number(item.precio_unitario) * Number(item.cantidad)).toFixed(2)}</td>
@@ -409,7 +490,7 @@ const Reports = () => {
                         <TableHead>
                             <TableRow sx={{ '& th': { backgroundColor: '#f5f5f5', fontWeight: 'bold' } }}>
                                 <TableCell width="40px" />
-                                <TableCell>Fecha y Hora</TableCell>
+                                <TableCell>Fecha y Hora (Guate)</TableCell>
                                 <TableCell>Ref.</TableCell>
                                 <TableCell>Vendedor</TableCell>
                                 <TableCell align="right">Total</TableCell>
