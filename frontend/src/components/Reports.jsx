@@ -497,7 +497,7 @@ const Reports = () => {
                         <TableHead>
                             <TableRow sx={{ '& th': { backgroundColor: '#f5f5f5', fontWeight: 'bold' } }}>
                                 <TableCell width="40px" />
-                                <TableCell>Fecha y Hora (Guate)</TableCell>
+                                <TableCell>Fecha y Hora</TableCell>
                                 <TableCell>Ref.</TableCell>
                                 <TableCell>Vendedor</TableCell>
                                 <TableCell align="right">Total</TableCell>
