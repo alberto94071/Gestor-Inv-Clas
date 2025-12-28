@@ -263,11 +263,11 @@ router.post('/config/ticket', authenticateToken, checkAdminRole, async (req, res
 });
 
 // =====================================================================
-// 8. HISTORIAL DE VENTAS (ACTUALIZADO Y BLINDADO)
+// 8. HISTORIAL DE VENTAS (CORREGIDO Y OPTIMIZADO) 🟢
 // =====================================================================
 router.get('/sales-history', authenticateToken, async (req, res) => {
     try {
-        // Usamos comillas para FORZAR los nombres exactos y evitar problemas de minúsculas
+        // AHORA SÍ TRAEMOS: imagen_url, marca, talla, color
         const query = `
             SELECT 
                 h.id,
@@ -277,7 +277,10 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
                 h.total_venta as "totalVenta",
                 p.nombre as producto,
                 p.codigo_barras as codigo,
-                -- COALESCE asegura que si el usuario no existe, diga 'Sistema'
+                p.imagen_url,   -- 🟢 NECESARIO PARA LA FOTO
+                p.marca,        -- 🟢 NECESARIO PARA LA MARCA
+                p.talla,        -- 🟢 NECESARIO PARA LA TALLA
+                p.color,        -- 🟢 NECESARIO PARA EL COLOR
                 COALESCE(u.nombre, 'Sistema') as vendedor
             FROM historial_ventas h
             JOIN productos p ON h.producto_id = p.id
@@ -296,24 +299,24 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
 });
 
 // =====================================================================
-// 9. RUTAS PARA ADMIN TOOLS (Soluciona el error de pantalla blanca)
+// 9. RUTAS PARA ADMIN TOOLS
 // =====================================================================
 
-// Reporte de productos estancados
+// Reporte de productos estancados (Corregido el JOIN)
 router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, res) => {
     try {
-        // Asumiendo que existe la columna fecha_creacion, si no la tienes, esta consulta devolverá vacío sin fallar
+        // Unimos con la tabla 'inventario' para obtener la cantidad real
         const query = `
-            SELECT nombre, cantidad, fecha_creacion 
-            FROM productos 
-            WHERE fecha_creacion < NOW() - INTERVAL '3 months' 
-            AND cantidad > 0
-            ORDER BY fecha_creacion ASC
+            SELECT p.nombre, i.cantidad, p.fecha_creacion 
+            FROM productos p
+            JOIN inventario i ON p.id = i.producto_id
+            WHERE p.fecha_creacion < NOW() - INTERVAL '3 months' 
+            AND i.cantidad > 0
+            ORDER BY p.fecha_creacion ASC
         `;
         const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
-        // Si falla por falta de columna, devolvemos array vacío para no romper el front
         console.error("Error reporte:", err.message);
         res.json([]); 
     }
