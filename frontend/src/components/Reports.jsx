@@ -6,45 +6,39 @@ import {
 } from '@mui/material';
 import { 
     KeyboardArrowDown, KeyboardArrowUp, Print, 
-    CalendarMonth, Person, image
+    CalendarMonth, Person, Tag, BrandingWatermark
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
 // --- UTILIDADES ---
 const formatCurrency = (amount) => `Q${Number(amount).toFixed(2)}`;
 
-// 1. OPTIMIZADOR DE IMÁGENES (Para que no sea lento)
+// 1. OPTIMIZADOR DE IMÁGENES
 const getOptimizedUrl = (url) => {
-    if (!url) return ''; // Retorna vacío si no hay imagen
+    if (!url) return ''; 
+    // Si es de Cloudinary, pedimos la versión pequeña (100x100)
     if (url.includes('cloudinary') && url.includes('/upload/')) {
         return url.replace('/upload/', '/upload/w_100,h_100,c_fill,q_auto,f_auto/');
     }
     return url;
 };
 
-// 2. FORMATEADOR DE HORA (BLINDADO PARA GUATEMALA 🇬🇹)
+// 2. FORMATEADOR DE HORA (FUERZA BRUTA -6 HORAS) 🇬🇹
+// Igual que en Auditoría, para garantizar que salga bien.
 const formatDateTime = (fecha) => {
     if (!fecha) return '---';
-    let fechaStr = String(fecha);
     
-    // Si viene formato SQL con espacio, lo cambiamos a ISO
-    if (fechaStr.includes(' ') && !fechaStr.includes('T')) {
-        fechaStr = fechaStr.replace(' ', 'T');
-    }
-    // Si falta la Z de UTC, la agregamos para forzar la resta de 6 horas
-    if (!fechaStr.endsWith('Z')) {
-        fechaStr += 'Z';
-    }
+    // Convertimos a objeto fecha
+    const fechaObj = new Date(fecha);
+    
+    // RESTA MANUAL DE 6 HORAS
+    // Si el servidor dice 12:00 (UTC), le quitamos 6 para que sea 06:00 (Guate)
+    fechaObj.setHours(fechaObj.getHours() - 6);
 
-    try {
-        return new Date(fechaStr).toLocaleString('es-GT', {
-            timeZone: 'America/Guatemala',
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', hour12: true
-        });
-    } catch (e) {
-        return fecha;
-    }
+    return fechaObj.toLocaleString('es-GT', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: true
+    });
 };
 
 // --- ICONOS REDES ---
@@ -57,9 +51,11 @@ const ICON_WP = "https://cdn-icons-png.flaticon.com/512/733/733585.png";
 const Row = ({ row, onReprint }) => {
     const [open, setOpen] = useState(false);
     
-    // Usamos la fecha ya procesada del grupo
-    const fechaObj = new Date(row.fecha.endsWith('Z') ? row.fecha : row.fecha + 'Z'); 
-    // Generamos referencia visual
+    // Usamos la función de resta manual para mostrar en pantalla
+    const fechaVisual = formatDateTime(row.fecha);
+    
+    // Para la referencia interna
+    const fechaObj = new Date(row.fecha); 
     const displayRef = `REF-${fechaObj.getTime().toString().slice(-6)}`;
     const vendedorNombre = row.vendedor || 'Sistema';
 
@@ -72,17 +68,17 @@ const Row = ({ row, onReprint }) => {
                     </IconButton>
                 </TableCell>
                 
-                {/* COLUMNA FECHA Y HORA CORREGIDA */}
+                {/* COLUMNA FECHA Y HORA */}
                 <TableCell>
                     <Box display="flex" flexDirection="column">
                         <Box display="flex" alignItems="center" gap={1}>
                             <CalendarMonth fontSize="small" color="action" />
                             <Typography variant="body2" fontWeight="bold">
-                                {formatDateTime(row.fecha).split(',')[0]} {/* Solo fecha */}
+                                {fechaVisual.split(',')[0]}
                             </Typography>
                         </Box>
                         <Typography variant="caption" color="textSecondary" sx={{ ml: 3 }}>
-                            {formatDateTime(row.fecha).split(',')[1]} {/* Solo hora */}
+                            {fechaVisual.split(',')[1]}
                         </Typography>
                     </Box>
                 </TableCell>
@@ -124,13 +120,13 @@ const Row = ({ row, onReprint }) => {
                     <Collapse in={open} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2, padding: 2, backgroundColor: '#fff', borderRadius: 2, border: '1px solid #eee' }}>
                             <Typography variant="subtitle2" gutterBottom sx={{fontWeight:'bold', color: '#555'}}>
-                                Detalle de Productos Vendidos:
+                                Detalle de Productos:
                             </Typography>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
-                                        <TableCell width="60px">Img</TableCell> {/* Nueva Columna */}
-                                        <TableCell>Producto / Detalles</TableCell>
+                                        <TableCell width="60px">Img</TableCell>
+                                        <TableCell>Producto / Código / Marca</TableCell>
                                         <TableCell align="right">Cant.</TableCell>
                                         <TableCell align="right">P. Unit.</TableCell>
                                         <TableCell align="right">Subtotal</TableCell>
@@ -139,30 +135,45 @@ const Row = ({ row, onReprint }) => {
                                 <TableBody>
                                     {row.items.map((item, index) => (
                                         <TableRow key={index}>
-                                            {/* FOTO DEL PRODUCTO */}
+                                            {/* IMAGEN DEL PRODUCTO */}
                                             <TableCell>
                                                 <Avatar 
                                                     src={getOptimizedUrl(item.imagen_url)} 
                                                     variant="rounded" 
-                                                    sx={{ width: 40, height: 40 }}
+                                                    sx={{ width: 45, height: 45, bgcolor: '#eee' }}
                                                 >
                                                     P
                                                 </Avatar>
                                             </TableCell>
                                             
-                                            {/* NOMBRE Y DETALLES (MARCA, TALLA) */}
+                                            {/* DETALLES: NOMBRE, CÓDIGO, MARCA */}
                                             <TableCell>
-                                                <Typography variant="body2" fontWeight="bold">
-                                                    {item.producto}
-                                                </Typography>
-                                                {/* Aquí mostramos los detalles extra si existen */}
-                                                <Box display="flex" gap={1} mt={0.5}>
+                                                <Typography variant="body2" fontWeight="bold">{item.producto}</Typography>
+                                                
+                                                <Box display="flex" flexWrap="wrap" gap={1} mt={0.5}>
+                                                    {/* CÓDIGO */}
+                                                    {(item.codigo || item.codigo_barras) && (
+                                                        <Chip 
+                                                            icon={<Tag style={{fontSize: 12}} />} 
+                                                            label={item.codigo || item.codigo_barras} 
+                                                            size="small" 
+                                                            sx={{height: 20, fontSize: '0.65rem', bgcolor: '#e3f2fd'}} 
+                                                        />
+                                                    )}
+                                                    {/* MARCA */}
                                                     {item.marca && (
-                                                        <Chip label={item.marca} size="small" sx={{height: 20, fontSize: '0.65rem'}} />
+                                                        <Chip 
+                                                            icon={<BrandingWatermark style={{fontSize: 12}} />}
+                                                            label={item.marca} 
+                                                            size="small" 
+                                                            sx={{height: 20, fontSize: '0.65rem'}} 
+                                                        />
                                                     )}
+                                                    {/* TALLA */}
                                                     {item.talla && (
-                                                        <Chip label={`Talla: ${item.talla}`} size="small" variant="outlined" sx={{height: 20, fontSize: '0.65rem'}} />
+                                                        <Chip label={`T: ${item.talla}`} size="small" variant="outlined" sx={{height: 20, fontSize: '0.65rem'}} />
                                                     )}
+                                                    {/* COLOR */}
                                                     {item.color && (
                                                         <Chip label={item.color} size="small" variant="outlined" sx={{height: 20, fontSize: '0.65rem'}} />
                                                     )}
@@ -202,7 +213,6 @@ const Reports = () => {
             const response = await API.get('/inventory/sales-history', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // console.log("Datos del server:", response.data); 
             setSalesData(processSalesSmartly(response.data));
         } catch (err) {
             setError("No se pudo cargar el historial.");
@@ -211,7 +221,7 @@ const Reports = () => {
         }
     };
 
-    // ALGORITMO INTELIGENTE DE AGRUPACIÓN
+    // ALGORITMO DE AGRUPACIÓN (Ahora captura código, marca e imagen)
     const processSalesSmartly = (flatItems) => {
         if (!flatItems || flatItems.length === 0) return [];
         
@@ -232,21 +242,24 @@ const Reports = () => {
             const totalItem = Number(item.totalVenta || item.totalventa || (precio * item.cantidad));
             const vendedor = item.vendedor; 
 
+            // Objeto con los datos del ítem (para no repetir código)
+            const itemData = {
+                producto: item.producto,
+                cantidad: item.cantidad,
+                precio_unitario: precio,
+                imagen_url: item.imagen_url,      // <--- Captura imagen
+                marca: item.marca,                // <--- Captura marca
+                codigo: item.codigo || item.codigo_barras, // <--- Captura código
+                talla: item.talla,
+                color: item.color
+            };
+
             if (currentGroup) {
                 const groupTime = new Date(currentGroup.fecha).getTime();
                 const diffSeconds = Math.abs(groupTime - itemTime) / 1000;
 
                 if (diffSeconds <= 10 && vendedor === currentGroup.vendedor) {
-                    currentGroup.items.push({
-                        producto: item.producto,
-                        cantidad: item.cantidad,
-                        precio_unitario: precio,
-                        // 🟢 AGREGAMOS DATOS EXTRA AQUI
-                        imagen_url: item.imagen_url, 
-                        marca: item.marca,
-                        talla: item.talla,
-                        color: item.color
-                    });
+                    currentGroup.items.push(itemData);
                     currentGroup.totalVenta += totalItem;
                     continue; 
                 }
@@ -257,16 +270,7 @@ const Reports = () => {
                 fecha: rawDate,
                 vendedor: vendedor,
                 totalVenta: totalItem,
-                items: [{
-                    producto: item.producto,
-                    cantidad: item.cantidad,
-                    precio_unitario: precio,
-                    // 🟢 AGREGAMOS DATOS EXTRA AQUI TAMBIEN
-                    imagen_url: item.imagen_url,
-                    marca: item.marca,
-                    talla: item.talla,
-                    color: item.color
-                }]
+                items: [itemData]
             };
             groups.push(currentGroup);
         }
@@ -285,10 +289,8 @@ const Reports = () => {
 
             const totalPrint = saleRow.totalVenta;
             
-            // Usamos la misma lógica de fecha segura para la impresión
-            const fechaRaw = saleRow.fecha.endsWith('Z') ? saleRow.fecha : saleRow.fecha + 'Z';
-            const fechaVenta = new Date(fechaRaw);
-            // Ajuste manual visual para impresión si fuera necesario, pero Date() suele manejarlo bien con locale
+            // Usamos la función de resta manual para la impresión también
+            const fechaVisual = formatDateTime(saleRow.fecha); 
             
             const qrUrl = config.instagram_url 
                 ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(config.instagram_url)}`
@@ -310,13 +312,7 @@ const Reports = () => {
                     .divider { border-top: 1px dashed #000; margin: 6px 0; }
                     .info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
                     
-                    #logo-img { 
-                        display: block; 
-                        margin: 5px auto; 
-                        width: 40mm; 
-                        height: auto; 
-                        object-fit: contain;
-                    }
+                    #logo-img { display: block; margin: 5px auto; width: 40mm; height: auto; object-fit: contain; }
                     .socials-container { margin-top: 10px; padding-top: 5px; border-top: 1px dotted #000; }
                     .social-item-mini { display: flex; align-items: center; justify-content: center; margin-bottom: 3px; font-size: 10px; }
                     .social-icon-mini { width: 14px; height: 14px; margin-right: 5px; }
@@ -334,8 +330,7 @@ const Reports = () => {
                 </div>
                 
                 <div class="divider"></div>
-                <div class="info-row"><span>FECHA:</span> <span>${fechaVenta.toLocaleDateString('es-GT')}</span></div>
-                <div class="info-row"><span>HORA:</span> <span>${fechaVenta.toLocaleTimeString('es-GT', {hour: '2-digit', minute:'2-digit'})}</span></div>
+                <div class="info-row"><span>FECHA:</span> <span>${fechaVisual}</span></div>
                 <div class="info-row"><span>REF:</span> <span>${displayRef}</span></div>
                 <div class="info-row bold" style="font-size: 12px;"><span>VENDEDOR:</span> <span>${saleRow.vendedor}</span></div>
                 
@@ -345,7 +340,10 @@ const Reports = () => {
                     <tbody>
                         ${saleRow.items.map(item => `
                             <tr>
-                                <td style="padding-top:4px;">${item.producto.substring(0,18)}</td>
+                                <td style="padding-top:4px;">
+                                    ${item.producto.substring(0,18)}
+                                    ${item.codigo ? `<br/><span style="font-size:9px">(${item.codigo})</span>` : ''}
+                                </td>
                                 <td align="center" style="padding-top:4px;">${item.cantidad}</td>
                                 <td align="right" style="padding-top:4px;">Q${(Number(item.precio_unitario) * Number(item.cantidad)).toFixed(2)}</td>
                             </tr>
@@ -361,12 +359,7 @@ const Reports = () => {
                     <div class="social-item-mini"><img src="${ICON_FB}" class="social-icon-mini"/> <span>Potter's store</span></div>
                     <div class="social-item-mini"><img src="${ICON_TIKTOK}" class="social-icon-mini"/> <span>@potters_store</span></div>
                     
-                    ${qrUrl ? `
-                        <div style="margin-top: 8px;">
-                            <img src="${qrUrl}" class="qr-mini"/>
-                            <div style="font-size: 9px;">Escanea para Instagram</div>
-                        </div>
-                    ` : ''}
+                    ${qrUrl ? `<div style="margin-top: 8px;"><img src="${qrUrl}" class="qr-mini"/><div style="font-size: 9px;">Escanea para Instagram</div></div>` : ''}
                 </div>
 
                 <div class="divider"></div>
@@ -374,7 +367,7 @@ const Reports = () => {
                 <div class="center" style="font-size: 9px; margin-top: 5px;">Documento no contable</div>
             `;
 
-            const estilosCarta = `
+             const estilosCarta = `
                 <style>
                 @page { size: letter portrait; margin: 0.8cm; }
                 body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
@@ -412,7 +405,7 @@ const Reports = () => {
                 <div class="info-bar">
                     <span>Ref: ${displayRef}</span>
                     <span>Vendedor: ${saleRow.vendedor}</span>
-                    <span>Fecha: ${fechaVenta.toLocaleDateString('es-GT')} ${fechaVenta.toLocaleTimeString('es-GT')}</span>
+                    <span>Fecha: ${fechaVisual}</span>
                 </div>
                 <table>
                     <thead>
@@ -421,7 +414,11 @@ const Reports = () => {
                     <tbody>
                         ${saleRow.items.map(item => `
                             <tr>
-                                <td>${item.producto} ${item.marca ? `(${item.marca})` : ''}</td>
+                                <td>
+                                    ${item.producto} 
+                                    ${item.marca ? `(${item.marca})` : ''}
+                                    ${item.codigo ? `[${item.codigo}]` : ''}
+                                </td>
                                 <td style="text-align:center">${item.cantidad}</td>
                                 <td style="text-align:right">Q${Number(item.precio_unitario).toFixed(2)}</td>
                                 <td style="text-align:right">Q${(Number(item.precio_unitario) * Number(item.cantidad)).toFixed(2)}</td>
@@ -450,27 +447,37 @@ const Reports = () => {
             printWindow.document.write(`<html><head><title>Ticket</title>${esCarta ? estilosCarta : estilos80mm}</head><body>${esCarta ? contenidoCarta : contenido80mm}</body></html>`);
             printWindow.document.close();
 
-            const logoEl = printWindow.document.getElementById('logo-img');
-            const is80mm = !esCarta;
-
-            if (is80mm && logoEl && config.logo_url) {
-                logoEl.onload = () => {
-                    printWindow.focus();
-                    printWindow.print();
-                    printWindow.close();
+            // ==========================================================
+            // LOGICA PARA ESPERAR QUE CARGUEN LAS IMAGENES ANTES DE IMPRIMIR
+            // ==========================================================
+            const waitForImagesAndPrint = () => {
+                const images = printWindow.document.getElementsByTagName('img');
+                const checkImages = () => {
+                    let allLoaded = true;
+                    for (let i = 0; i < images.length; i++) {
+                        if (!images[i].complete) {
+                            allLoaded = false;
+                            break;
+                        }
+                    }
+                    if (allLoaded) {
+                        printWindow.focus();
+                        printWindow.print();
+                        printWindow.close();
+                    } else {
+                        setTimeout(checkImages, 100);
+                    }
                 };
-                logoEl.onerror = () => { 
-                    printWindow.print();
-                    printWindow.close();
-                };
-                setTimeout(() => { if (!printWindow.closed) { printWindow.print(); printWindow.close(); } }, 3000);
-            } else {
                 setTimeout(() => {
-                    printWindow.focus();
-                    printWindow.print();
-                    printWindow.close();
-                }, 800);
-            }
+                    if (!printWindow.closed) { 
+                        printWindow.print(); 
+                        printWindow.close(); 
+                    }
+                }, 4000);
+                checkImages();
+            };
+
+            waitForImagesAndPrint();
 
         } catch (e) { alert("Error al imprimir."); console.error(e); }
     };
