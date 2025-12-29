@@ -382,7 +382,7 @@ const PointOfSale = () => {
                 {/* 🟢 DEBUGGER VISUAL DE ROL (Puedes quitarlo luego) */}
                 <Chip 
                     icon={<AdminPanelSettings />} 
-                    label={`Usuario: ${userName} | Rol: ${userRole || 'N/A'} | Admin? ${isAdmin ? 'SI' : 'NO'}`} 
+                    label={`Usuario: ${userName} | Rol: ${userRole || 'N/A'} `} 
                     color={isAdmin ? "success" : "default"} 
                     variant="outlined" 
                     sx={{ fontWeight: 'bold' }}
