@@ -35,12 +35,22 @@ const PointOfSale = () => {
 
     const inputRef = useRef(null);
 
-    // --- 🟢 VALIDACIÓN DE ROL AGREGADA AQUÍ ---
-    // Obtenemos usuario y rol
+    // =========================================================
+    // 🟢 VALIDACIÓN DE ROL CORREGIDA (MÁS ROBUSTA)
+    // =========================================================
     const currentUser = localStorage.getItem('userName') || 'Cajero';
-    const userRole = localStorage.getItem('userRole') || ''; 
-    // Verificamos si es admin (usamos toLowerCase para evitar errores de mayúsculas)
-    const isAdmin = userRole.toLowerCase() === 'admin';
+    
+    // Buscamos el rol en varias llaves por si acaso
+    const rawRole = localStorage.getItem('userRole') || localStorage.getItem('rol') || localStorage.getItem('role') || '';
+    
+    // Normalizamos a minúsculas y quitamos espacios
+    const normalizedRole = rawRole.toLowerCase().trim();
+
+    // Verificamos si es admin (aceptamos "admin" o "administrador")
+    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+
+    // 🔍 DEPURACIÓN: Esto saldrá en la consola (F12) para que veas qué está leyendo
+    // console.log("Rol detectado:", rawRole, "| Es Admin?:", isAdmin);
 
     // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
@@ -72,7 +82,6 @@ const PointOfSale = () => {
         fetchTicketConfig(); 
         focusInput();
         
-        // Lógica de carrito persistente
         const savedCart = localStorage.getItem('pos_persistent_cart');
         let finalCart = savedCart ? JSON.parse(savedCart) : [];
 
@@ -192,7 +201,7 @@ const PointOfSale = () => {
         }
     };
 
-    // --- IMPRESIÓN (LÓGICA MEJORADA PARA ICONOS) ---
+    // --- IMPRESIÓN ---
     const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now(), vendedorName = currentUser) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
@@ -281,7 +290,6 @@ const PointOfSale = () => {
                 <div class="center bold" style="margin-top: 10px; font-size: 12px;">${config.mensaje_final || "¡GRACIAS!"}</div>
             `;
 
-            // ================= ESTILOS CARTA =================
             const estilosCarta = `<style>body{font-family:sans-serif;padding:20px;} .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;}</style>`;
             const contenidoCarta = `
                 <div class="header"><h1>Recibo de Venta</h1></div>
@@ -301,7 +309,6 @@ const PointOfSale = () => {
             printWindow.document.write(html);
             printWindow.document.close();
 
-            // 🟢 LÓGICA DE ESPERA BLINDADA: Espera todas las imágenes, no solo el logo
             const waitForImagesAndPrint = () => {
                 const images = printWindow.document.images;
                 const totalImages = images.length;
@@ -327,15 +334,13 @@ const PointOfSale = () => {
                         checkAllLoaded();
                     } else {
                         images[i].onload = checkAllLoaded;
-                        images[i].onerror = checkAllLoaded; // Si falla uno, imprimir igual
+                        images[i].onerror = checkAllLoaded;
                     }
                 }
             };
 
-            // Ejecutamos la espera
             setTimeout(waitForImagesAndPrint, 100);
 
-            // Timeout de seguridad
             setTimeout(() => {
                 if (!printWindow.closed) {
                     printWindow.focus();
@@ -380,7 +385,6 @@ const PointOfSale = () => {
             </Box>
 
             <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, overflow: 'hidden', pb: 1 }}>
-                {/* COLUMNA IZQUIERDA */}
                 <Paper elevation={3} sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <TextField
                         inputRef={inputRef}
@@ -407,7 +411,6 @@ const PointOfSale = () => {
                     </Box>
                 </Paper>
 
-                {/* COLUMNA DERECHA */}
                 <Paper elevation={3} sx={{ p: 2, width: '55%', minWidth: '550px', display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', overflow: 'hidden' }}>
                     <Typography variant="h6" sx={{ borderBottom: '1px solid #ccc', pb: 1, flexShrink: 0 }}>Detalle de Venta</Typography>
 
@@ -442,7 +445,7 @@ const PointOfSale = () => {
                                             </Box>
                                         </TableCell>
                                         <TableCell align="center">
-                                            {/* 🟢 LÓGICA DE CONDICIÓN: Si es Admin muestra Input, si no, Texto */}
+                                            {/* 🟢 CONDICIÓN CORREGIDA: Verifica 'admin' o 'administrador' */}
                                             {isAdmin ? (
                                                 <TextField 
                                                     type="number" variant="standard"
