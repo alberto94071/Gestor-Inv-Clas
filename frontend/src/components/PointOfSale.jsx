@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Box, Paper, Typography, TextField, Button, 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip
+    IconButton, Alert, CircularProgress, Avatar, InputAdornment, Tooltip, Chip
 } from '@mui/material';
 import { 
     Delete, RemoveCircleOutline, AddCircleOutline, 
-    ShoppingCart, Print, RemoveShoppingCart 
+    ShoppingCart, Print, RemoveShoppingCart, AdminPanelSettings
 } from '@mui/icons-material';
 import API from '../api/axiosInstance'; 
 
@@ -36,21 +36,27 @@ const PointOfSale = () => {
     const inputRef = useRef(null);
 
     // =========================================================
-    // 🟢 VALIDACIÓN DE ROL CORREGIDA (MÁS ROBUSTA)
+    // 🟢 VALIDACIÓN DE ROL (BASADA EN STATSDASHBOARD)
     // =========================================================
-    const currentUser = localStorage.getItem('userName') || 'Cajero';
     
-    // Buscamos el rol en varias llaves por si acaso
-    const rawRole = localStorage.getItem('userRole') || localStorage.getItem('rol') || localStorage.getItem('role') || '';
-    
-    // Normalizamos a minúsculas y quitamos espacios
-    const normalizedRole = rawRole.toLowerCase().trim();
+    // 1. Obtenemos el objeto 'user' del localStorage (Igual que en tu Dashboard)
+    const userStr = localStorage.getItem('user');
+    let userRole = '';
+    let userName = 'Cajero';
 
-    // Verificamos si es admin (aceptamos "admin" o "administrador")
-    const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrador';
+    if (userStr) {
+        try {
+            const userData = JSON.parse(userStr);
+            // Extraemos el rol (propiedad 'rol')
+            userRole = userData.rol || '';
+            userName = userData.nombre || userData.username || 'Usuario';
+        } catch (e) {
+            console.error("Error al leer datos del usuario", e);
+        }
+    }
 
-    // 🔍 DEPURACIÓN: Esto saldrá en la consola (F12) para que veas qué está leyendo
-    // console.log("Rol detectado:", rawRole, "| Es Admin?:", isAdmin);
+    // 2. Verificamos si es admin (convertimos a minúsculas por si acaso)
+    const isAdmin = userRole.toLowerCase() === 'admin';
 
     // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
@@ -186,7 +192,7 @@ const PointOfSale = () => {
             setLastSaleCart(currentCart);
             setLastTicketId(ticketId);
 
-            await handlePrintTicket(currentCart, ticketId, currentUser);
+            await handlePrintTicket(currentCart, ticketId, userName);
 
             setSuccessMsg("¡Venta registrada con éxito!");
             setCart([]); 
@@ -202,7 +208,7 @@ const PointOfSale = () => {
     };
 
     // --- IMPRESIÓN ---
-    const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now(), vendedorName = currentUser) => {
+    const handlePrintTicket = async (cartToPrint = cart, ticketId = Date.now(), vendedorName = userName) => {
         if (!cartToPrint || cartToPrint.length === 0) return;
 
         try {
@@ -373,10 +379,19 @@ const PointOfSale = () => {
                     🛒 Punto de Venta
                 </Typography>
                 
+                {/* 🟢 DEBUGGER VISUAL DE ROL (Puedes quitarlo luego) */}
+                <Chip 
+                    icon={<AdminPanelSettings />} 
+                    label={`Usuario: ${userName} | Rol: ${userRole || 'N/A'} | Admin? ${isAdmin ? 'SI' : 'NO'}`} 
+                    color={isAdmin ? "success" : "default"} 
+                    variant="outlined" 
+                    sx={{ fontWeight: 'bold' }}
+                />
+
                 {lastSaleCart && (
                     <Button 
                         startIcon={<Print />} 
-                        onClick={() => handlePrintTicket(lastSaleCart, lastTicketId, currentUser)}
+                        onClick={() => handlePrintTicket(lastSaleCart, lastTicketId, userName)}
                         variant="outlined" size="small" color="secondary"
                     >
                         Re-imprimir Ticket
@@ -445,7 +460,7 @@ const PointOfSale = () => {
                                             </Box>
                                         </TableCell>
                                         <TableCell align="center">
-                                            {/* 🟢 CONDICIÓN CORREGIDA: Verifica 'admin' o 'administrador' */}
+                                            {/* 🟢 CONDICIÓN: Verifica si es Admin usando la nueva lógica */}
                                             {isAdmin ? (
                                                 <TextField 
                                                     type="number" variant="standard"
