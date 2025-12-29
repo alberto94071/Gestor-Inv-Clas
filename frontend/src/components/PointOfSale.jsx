@@ -35,8 +35,12 @@ const PointOfSale = () => {
 
     const inputRef = useRef(null);
 
-    // Obtener usuario actual
+    // --- 🟢 VALIDACIÓN DE ROL AGREGADA AQUÍ ---
+    // Obtenemos usuario y rol
     const currentUser = localStorage.getItem('userName') || 'Cajero';
+    const userRole = localStorage.getItem('userRole') || ''; 
+    // Verificamos si es admin (usamos toLowerCase para evitar errores de mayúsculas)
+    const isAdmin = userRole.toLowerCase() === 'admin';
 
     // Total Dinámico
     const total = cart.reduce((acc, item) => acc + (Number(item.precio_venta) * item.qty), 0);
@@ -127,6 +131,8 @@ const PointOfSale = () => {
     };
 
     const updatePrice = (id, newPrice) => {
+        // Doble validación: solo permitimos cambiar si es admin
+        if (!isAdmin) return; 
         setCart(cart.map(item => item.id === id ? { ...item, precio_venta: newPrice } : item));
     };
 
@@ -298,8 +304,8 @@ const PointOfSale = () => {
             // 🟢 LÓGICA DE ESPERA BLINDADA: Espera todas las imágenes, no solo el logo
             const waitForImagesAndPrint = () => {
                 const images = printWindow.document.images;
-                let loadedCount = 0;
                 const totalImages = images.length;
+                let loadedCount = 0;
 
                 if (totalImages === 0) {
                     printWindow.print();
@@ -326,10 +332,10 @@ const PointOfSale = () => {
                 }
             };
 
-            // Ejecutamos la espera (con un pequeño delay inicial para asegurar DOM)
+            // Ejecutamos la espera
             setTimeout(waitForImagesAndPrint, 100);
 
-            // Timeout de seguridad: Si en 3 seg no ha impreso, forzar impresión
+            // Timeout de seguridad
             setTimeout(() => {
                 if (!printWindow.closed) {
                     printWindow.focus();
@@ -436,18 +442,25 @@ const PointOfSale = () => {
                                             </Box>
                                         </TableCell>
                                         <TableCell align="center">
-                                            <TextField 
-                                                type="number" variant="standard"
-                                                value={item.precio_venta}
-                                                onChange={(e) => updatePrice(item.id, e.target.value)}
-                                                InputProps={{
-                                                    startAdornment: <InputAdornment position="start" sx={{mr:0}}><Typography variant="caption">Q</Typography></InputAdornment>,
-                                                    disableUnderline: true,
-                                                    style: { fontWeight: 'bold', color: '#2e7d32', fontSize: '14px' }
-                                                }}
-                                                sx={{ width: '70px' }}
-                                                onClick={(e) => e.target.select()}
-                                            />
+                                            {/* 🟢 LÓGICA DE CONDICIÓN: Si es Admin muestra Input, si no, Texto */}
+                                            {isAdmin ? (
+                                                <TextField 
+                                                    type="number" variant="standard"
+                                                    value={item.precio_venta}
+                                                    onChange={(e) => updatePrice(item.id, e.target.value)}
+                                                    InputProps={{
+                                                        startAdornment: <InputAdornment position="start" sx={{mr:0}}><Typography variant="caption">Q</Typography></InputAdornment>,
+                                                        disableUnderline: true,
+                                                        style: { fontWeight: 'bold', color: '#2e7d32', fontSize: '14px' }
+                                                    }}
+                                                    sx={{ width: '70px' }}
+                                                    onClick={(e) => e.target.select()}
+                                                />
+                                            ) : (
+                                                <Typography sx={{ fontWeight: 'bold', color: '#2e7d32', fontSize: '14px', py: 1 }}>
+                                                    {formatCurrency(item.precio_venta)}
+                                                </Typography>
+                                            )}
                                         </TableCell>
                                         <TableCell align="right">{formatCurrency(item.precio_venta * item.qty)}</TableCell>
                                         <TableCell>
