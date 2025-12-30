@@ -52,7 +52,11 @@ const InventoryDashboard = () => {
         try {
             const token = localStorage.getItem('authToken');
             const userStr = localStorage.getItem('user');
-            if (userStr) setUserRole(JSON.parse(userStr).rol || '');
+            if (userStr) {
+                // Aseguramos leer el rol correctamente y pasarlo a minúsculas
+                const rol = JSON.parse(userStr).rol || '';
+                setUserRole(rol.toLowerCase());
+            }
 
             const response = await API.get('/inventory/inventory', {
                 headers: { Authorization: `Bearer ${token}` }
@@ -93,10 +97,21 @@ const InventoryDashboard = () => {
             const found = inventory.find(p => p.codigo_barras === code);
             
             if (found) {
-                setSelectedProduct(found);
-                setStockModalOpen(true);
-                setStockQuantity('');
+                // 🔒 VALIDACIÓN DE SEGURIDAD PARA ESCÁNER
+                if (userRole === 'admin') {
+                    setSelectedProduct(found);
+                    setStockModalOpen(true);
+                    setStockQuantity('');
+                } else {
+                    // Si es cajero, solo le avisamos que existe y cuánto hay
+                    setToast({ 
+                        open: true, 
+                        msg: `Producto Encontrado: ${found.nombre} | Stock: ${found.cantidad}`, 
+                        severity: 'info' 
+                    });
+                }
             } else {
+                // Si no existe, sugerimos crear (esto también podrías restringirlo si quisieras)
                 setScannedCode(code);
                 setConfirmNewOpen(true);
             }
@@ -139,10 +154,8 @@ const InventoryDashboard = () => {
         // Verificar si ya está
         const existingItem = currentCart.find(item => item.id === product.id);
         if (existingItem) {
-            // Si ya existe, no sumamos cantidad aquí para no complicar, solo avisamos
             setToast({ open: true, msg: 'El producto ya está en el carrito POS', severity: 'info' });
         } else {
-            // Agregamos con cantidad 1
             currentCart.push({ ...product, qty: 1 });
             localStorage.setItem('pos_cart_temp', JSON.stringify(currentCart));
             setToast({ open: true, msg: '¡Agregado al Carrito! (Ve al Punto de Venta)', severity: 'success' });
@@ -252,14 +265,34 @@ const InventoryDashboard = () => {
                                 <TableCell>{product.marca}</TableCell>
                                 <TableCell><Chip label={product.codigo_barras || "N/A"} size="small" variant="outlined" /></TableCell>
                                 <TableCell align="right" sx={{ color: 'green', fontWeight: 'bold' }}>Q{Number(product.precio_venta).toFixed(2)}</TableCell>
+                                
+                                {/* 🟢 COLUMNA DE STOCK BLINDADA */}
                                 <TableCell align="center">
                                     <Chip 
                                         label={product.cantidad} 
                                         color={product.cantidad < 5 ? "error" : "success"} 
-                                        onClick={() => { setSelectedProduct(product); setStockModalOpen(true); setStockQuantity(''); }}
-                                        sx={{ cursor: 'pointer', minWidth: '40px', fontWeight: 'bold' }}
+                                        onClick={() => { 
+                                            // 🔒 VALIDACIÓN DE SEGURIDAD AL HACER CLICK
+                                            if (userRole === 'admin') {
+                                                setSelectedProduct(product); 
+                                                setStockModalOpen(true); 
+                                                setStockQuantity(''); 
+                                            } else {
+                                                setToast({ 
+                                                    open: true, 
+                                                    msg: 'Solo el Administrador puede modificar el stock.', 
+                                                    severity: 'warning' 
+                                                });
+                                            }
+                                        }}
+                                        sx={{ 
+                                            cursor: userRole === 'admin' ? 'pointer' : 'default', // Cursor cambia según el rol
+                                            minWidth: '40px', 
+                                            fontWeight: 'bold' 
+                                        }}
                                     />
                                 </TableCell>
+
                                 {userRole === 'admin' && (
                                     <TableCell align="center">
                                         <IconButton color="primary" onClick={() => handleOpenEdit(product)} size="small" sx={{ mr: 1 }}><Edit /></IconButton>
