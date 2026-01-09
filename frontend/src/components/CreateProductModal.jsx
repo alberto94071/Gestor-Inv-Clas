@@ -6,9 +6,9 @@ import {
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import API from '../api/axiosInstance.js';
 
-// Configuración fuera del componente
-const CLOUD_NAME = "dbwlqg4tp"; 
-const UPLOAD_PRESET = "potter_presets"; 
+// 🔴 CAMBIAR DATOS POR CUENTA NUEVA DE CLOUDINARY
+const CLOUD_NAME = "dysps3d7k"; 
+const UPLOAD_PRESET = "potter_presets";
 
 const initialState = {
     nombre: '', marca: '', descripcion: '', precio_venta: '',
@@ -21,21 +21,20 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
     const [error, setError] = useState(null);
     const [preview, setPreview] = useState(null);
 
-    // Detectamos si es modo edición basándonos en si el producto tiene ID
     const isEditing = Boolean(formData.id);
 
     useEffect(() => {
         if (open) {
             if (initialData) {
-                // Si recibimos datos (para editar o código escaneado), los cargamos
                 setFormData(prev => ({ ...initialState, ...initialData }));
-                // Si ya tiene foto (es edición), la mostramos
                 if (initialData.imagen_url) setPreview(initialData.imagen_url);
             } else {
-                // Si es nuevo limpio
                 setFormData(initialState);
                 setPreview(null);
             }
+        } else {
+            // Limpieza de memoria al cerrar
+            setPreview(null);
         }
     }, [open, initialData]);
 
@@ -48,7 +47,9 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
         const file = e.target.files[0];
         if (!file) return;
 
-        setPreview(URL.createObjectURL(file));
+        // Preview local rápido
+        const objectUrl = URL.createObjectURL(file);
+        setPreview(objectUrl);
         setLoading(true);
 
         const data = new FormData();
@@ -56,18 +57,23 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
         data.append("upload_preset", UPLOAD_PRESET); 
 
         try {
+            // Subida directa a Cloudinary
             const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: data });
             const fileData = await res.json();
+            
+            if (fileData.error) throw new Error(fileData.error.message);
+
+            // Guardamos la URL segura que nos devuelve Cloudinary (ya redimensionada por el preset)
             setFormData(prev => ({ ...prev, imagen_url: fileData.secure_url }));
         } catch (err) {
-            setError("Error al subir imagen, intente de nuevo.");
+            console.error(err);
+            setError("Error al subir imagen. Verifica tu conexión.");
         } finally {
             setLoading(false);
         }
     };
 
     const handleSubmit = async () => {
-        // Validación mínima
         if (!formData.nombre || !formData.precio_venta) {
             setError("Nombre y Precio son obligatorios.");
             return;
@@ -80,12 +86,10 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
             const token = getToken();
             
             if (isEditing) {
-                // --- MODO EDICIÓN (PUT) ---
                 await API.put(`/inventory/products/${formData.id}`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             } else {
-                // --- MODO CREACIÓN (POST) ---
                 await API.post('/inventory/products', formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -110,13 +114,16 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 
                 <Grid container spacing={2} sx={{ mt: 1 }}>
-                    {/* FOTO: Ahora es opcional */}
                     <Grid item xs={12} display="flex" flexDirection="column" alignItems="center" sx={{ mb: 2 }}>
                         <Box sx={{ width: 150, height: 150, border: '2px dashed #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderRadius: 2, mb: 1, bgcolor: '#f5f5f5' }}>
-                            {preview ? <img src={preview} alt="Prenda" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Typography variant="caption" color="textSecondary">Sin Foto</Typography>}
+                            {preview ? (
+                                <img src={preview} alt="Prenda" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                                <Typography variant="caption" color="textSecondary">Sin Foto</Typography>
+                            )}
                         </Box>
                         <Button variant="outlined" component="label" startIcon={<PhotoCamera />} disabled={loading}>
-                            {loading ? "Cargando..." : (isEditing ? "Cambiar Foto" : "Subir Foto")}
+                            {loading ? "Subiendo..." : (isEditing ? "Cambiar Foto" : "Subir Foto")}
                             <input type="file" hidden accept="image/*" onChange={handleImageChange} />
                         </Button>
                     </Grid>
