@@ -4,7 +4,7 @@ import API from '../api/axiosInstance';
 // 1. IMPORTS DE COMPONENTES UI (Material UI)
 import { 
     Container, Typography, CircularProgress, Grid, Card, CardContent, 
-    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button
 } from '@mui/material';
 
 // 2. IMPORTS DE ICONOS (Material Icons)
@@ -302,7 +302,7 @@ const StatsDashboard = () => {
                                     {userRole === 'admin' ? 'Ventas Globales (Semana)' : 'Mis Ventas (Semana)'}
                                 </Typography>
                                 <Divider sx={{ mb: 3 }} />
-                                {/* Scroll horizontal solo si es necesario en pantallas muy pequeñas */}
+                                {/* Scroll horizontal solo si es necesario */}
                                 <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
                                     <div style={{ minWidth: '500px', height: '100%' }}>
                                         {mounted && (
@@ -465,10 +465,18 @@ const StatsDashboard = () => {
                                 
                                 <div style={{ width: '100%', height: 350 }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                        {/* Aumentamos el margen inferior (bottom: 40) para las etiquetas rotadas */}
+                                        <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            {/* 🟢 MAGIA AQUÍ: interval={0} obliga a mostrar todos los meses */}
-                                            <XAxis dataKey="name" interval={0} tick={{ fontSize: 12 }} />
+                                            {/* 🟢 MAGIA AQUÍ: Rotamos -45 grados, interval 0 y más espacio */}
+                                            <XAxis 
+                                                dataKey="name" 
+                                                interval={0} 
+                                                angle={-45} 
+                                                textAnchor="end"
+                                                height={60} 
+                                                tick={{ fontSize: 11 }} 
+                                            />
                                             <YAxis />
                                             <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
                                             <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
