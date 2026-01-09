@@ -21,17 +21,21 @@ import {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ff5722', '#795548'];
 
-// 🟢 4. COMPONENTE DE BARRA PERSONALIZADA (FORMA DE LÁPIZ/FLECHA)
+// 🟢 4. COMPONENTE DE BARRA PERSONALIZADA (CORREGIDO)
 // Este componente dibuja cada barra con una punta triangular arriba
 const CustomPencilBar = (props) => {
+    // Desestructuramos las props que envía Recharts
     const { fill, x, y, width, height } = props;
 
-    // Calculamos la altura de la punta (triángulo superior)
-    // Usamos la mitad del ancho para que sea simétrico
-    const tipHeight = width / 2;
+    // Protección: si la barra es muy pequeña o los datos no están listos, no dibujar nada
+    if (!width || !height || height < 2) return null;
 
-    // Protección por si la barra es muy pequeña (evita errores visuales)
-    if (height < 2) return null;
+    // 💡 TRUCO: Si 'fill' llega undefined, usamos un color por defecto (azul)
+    // Esto evita que la barra sea invisible si falla la conexión con <Cell>
+    const color = fill || '#0088FE';
+
+    // Calculamos la altura de la punta (triángulo superior)
+    const tipHeight = width / 2;
 
     // Coordenadas del SVG para dibujar el lápiz
     const path = `
@@ -43,7 +47,7 @@ const CustomPencilBar = (props) => {
         Z                             // Cerrar figura
     `;
 
-    return <path d={path} stroke="none" fill={fill} />;
+    return <path d={path} stroke="none" fill={color} />;
 };
 
 const StatsDashboard = () => {
@@ -364,8 +368,8 @@ const StatsDashboard = () => {
                                                     <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} fontSize={11} />
                                                     <YAxis axisLine={false} tickLine={false} />
                                                     <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
-                                                    {/* 🟢 APLICAMOS FORMA DE LÁPIZ */}
-                                                    <Bar dataKey="stock" shape={<CustomPencilBar />} barSize={40}>
+                                                    {/* 🟢 CORRECCIÓN: shape como función para pasar props correctamente */}
+                                                    <Bar dataKey="stock" shape={(props) => <CustomPencilBar {...props} />} barSize={40}>
                                                         {stats.chartData.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                         ))}
@@ -443,13 +447,13 @@ const StatsDashboard = () => {
                                         <div style={{ width: '100%', height: 400, overflowX: 'auto' }}>
                                             <div style={{ minWidth: '600px', height: '100%' }}>
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                    {/* 🟢 DETALLE VENDEDOR CON LÁPIZ */}
+                                                    {/* 🟢 DETALLE VENDEDOR CON LÁPIZ (Corregido) */}
                                                     <BarChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                         <XAxis dataKey="name" interval={0} tick={{fontSize: 12}} />
                                                         <YAxis />
                                                         <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
-                                                        <Bar dataKey="total" shape={<CustomPencilBar />} barSize={50}>
+                                                        <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={50}>
                                                             {stats.vendorMonthlyDetail.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                                         </Bar>
                                                     </BarChart>
@@ -471,13 +475,13 @@ const StatsDashboard = () => {
                                 <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
                                     <div style={{ minWidth: '600px', height: '100%' }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            {/* 🟢 GLOBAL ADMIN CON LÁPIZ */}
+                                            {/* 🟢 GLOBAL ADMIN CON LÁPIZ (Corregido) */}
                                             <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} />
                                                 <YAxis axisLine={false} tickLine={false} />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
-                                                <Bar dataKey="total" shape={<CustomPencilBar />} barSize={50}>
+                                                <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={50}>
                                                     {stats.salesByMonth.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                                 </Bar>
                                             </BarChart>
@@ -504,8 +508,8 @@ const StatsDashboard = () => {
                                                 <XAxis dataKey="name" interval={0} tick={{ fontSize: 13 }} />
                                                 <YAxis />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                                {/* Aplicamos CustomPencilBar y colores aleatorios */}
-                                                <Bar dataKey="total" shape={<CustomPencilBar />} barSize={60}>
+                                                {/* 🟢 CORRECCIÓN: shape como función */}
+                                                <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={60}>
                                                     {stats.vendorMonthlyDetail.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                     ))}
