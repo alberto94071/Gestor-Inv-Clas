@@ -455,26 +455,23 @@ const StatsDashboard = () => {
                 )}
 
                 {/* 🟢 CORRECCIÓN VISTA DE CAJERO */}
+                {/* Se eliminó el "div" que forzaba 600px de ancho */}
                 {userRole !== 'admin' && (
                     <Grid item xs={12}>
                         <Paper elevation={3} sx={{ p: 3, borderRadius: 4, mt: 3 }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
                             <Divider sx={{ mb: 3 }} />
                             
-                            {/* AQUÍ ESTABA EL ERROR: Faltaban props al ResponsiveContainer y estilos al div padre */}
-                            <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}>
-                                <div style={{ minWidth: '600px', height: '100%' }}>
-                                    {/* 🟢 SE AGREGÓ width y height explícitos */}
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis dataKey="name" />
-                                            <YAxis />
-                                            <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                            <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            <div style={{ width: '100%', height: 350 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
+                                        <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
                             </div>
                         </Paper>
                     </Grid>
