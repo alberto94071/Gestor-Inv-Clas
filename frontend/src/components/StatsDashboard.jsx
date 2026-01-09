@@ -4,7 +4,7 @@ import API from '../api/axiosInstance';
 // 1. IMPORTS DE COMPONENTES UI (Material UI)
 import { 
     Container, Typography, CircularProgress, Grid, Card, CardContent, 
-    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton
 } from '@mui/material';
 
 // 2. IMPORTS DE ICONOS (Material Icons)
@@ -463,25 +463,20 @@ const StatsDashboard = () => {
                                 <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
                                 <Divider sx={{ mb: 3 }} />
                                 
-                                <div style={{ width: '100%', height: 350 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        {/* Aumentamos el margen inferior (bottom: 40) para las etiquetas rotadas */}
-                                        <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            {/* 🟢 MAGIA AQUÍ: Rotamos -45 grados, interval 0 y más espacio */}
-                                            <XAxis 
-                                                dataKey="name" 
-                                                interval={0} 
-                                                angle={-45} 
-                                                textAnchor="end"
-                                                height={60} 
-                                                tick={{ fontSize: 11 }} 
-                                            />
-                                            <YAxis />
-                                            <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                            <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
+                                {/* 🟢 CONTENEDOR CON SCROLL HORIZONTAL */}
+                                <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '10px' }}>
+                                    {/* 🟢 GRÁFICA GIGANTE (1200px de ancho) PARA QUE SE VEA BIEN EXPANDIDA */}
+                                    <div style={{ minWidth: '1200px', height: 500 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={{ fontSize: 13 }} />
+                                                <YAxis />
+                                                <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
+                                                <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </div>
                             </Paper>
                         </Grid>
