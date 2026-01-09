@@ -204,281 +204,284 @@ const StatsDashboard = () => {
     );
 
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            {/* CABECERA */}
-            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <TrendingUp fontSize="large" color="primary" />
-                    <Box>
-                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                            {userRole === 'admin' ? 'Dashboard Gerencial' : 'Mi Resumen de Ventas'}
-                        </Typography>
-                        <Typography variant="subtitle2" color="textSecondary">
-                            Hola, {userName}
-                        </Typography>
+        // 🟢 FIX DE SCROLL: Usamos un Box con altura fija y overflow auto para forzar scrollbar
+        <Box sx={{ height: '88vh', overflowY: 'auto', pb: 5 }}>
+            <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
+                {/* CABECERA */}
+                <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <TrendingUp fontSize="large" color="primary" />
+                        <Box>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                                {userRole === 'admin' ? 'Dashboard Gerencial' : 'Mi Resumen de Ventas'}
+                            </Typography>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Hola, {userName}
+                            </Typography>
+                        </Box>
                     </Box>
                 </Box>
-            </Box>
 
-            {/* KPI CARDS */}
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={4}>
-                    <Card elevation={3} sx={{ borderRadius: 4 }}>
-                        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
-                            <Avatar sx={{ bgcolor: '#e3f2fd', color: '#1976d2', width: 60, height: 60 }}><Inventory fontSize="large" /></Avatar>
-                            <Box>
-                                <Typography variant="h4" fontWeight="bold">{stats.totalProducts}</Typography>
-                                <Typography variant="subtitle1" color="text.secondary">Productos</Typography>
-                            </Box>
-                        </CardContent>
-                    </Card>
+                {/* KPI CARDS */}
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                    <Grid item xs={12} md={4}>
+                        <Card elevation={3} sx={{ borderRadius: 4 }}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
+                                <Avatar sx={{ bgcolor: '#e3f2fd', color: '#1976d2', width: 60, height: 60 }}><Inventory fontSize="large" /></Avatar>
+                                <Box>
+                                    <Typography variant="h4" fontWeight="bold">{stats.totalProducts}</Typography>
+                                    <Typography variant="subtitle1" color="text.secondary">Productos</Typography>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card elevation={3} sx={{ borderRadius: 4 }}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
+                                <Avatar sx={{ bgcolor: userRole === 'admin' ? '#e8f5e9' : '#eceff1', color: userRole === 'admin' ? '#2e7d32' : '#90a4ae', width: 60, height: 60 }}>
+                                    {userRole === 'admin' ? <AttachMoney fontSize="large" /> : <Lock fontSize="large" />}
+                                </Avatar>
+                                <Box>
+                                    {userRole === 'admin' ? (
+                                        <>
+                                            <Typography variant="h4" fontWeight="bold" sx={{ color: '#2e7d32' }}>{formatCurrency(stats.totalValue)}</Typography>
+                                            <Typography variant="subtitle1" color="text.secondary">Valor Inventario</Typography>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Typography variant="h4" fontWeight="bold" sx={{ color: '#b0bec5' }}>----</Typography>
+                                            <Typography variant="subtitle1" color="text.secondary">Valor Oculto</Typography>
+                                        </>
+                                    )}
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                        <Card elevation={3} sx={{ borderRadius: 4 }}>
+                            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
+                                <Avatar sx={{ bgcolor: '#fff3e0', color: '#ef6c00', width: 60, height: 60 }}><Warning fontSize="large" /></Avatar>
+                                <Box>
+                                    <Typography variant="h4" fontWeight="bold" sx={{ color: '#ef6c00' }}>{stats.lowStockItems}</Typography>
+                                    <Typography variant="subtitle1" color="text.secondary">Alertas Stock</Typography>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    </Grid>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
-                    <Card elevation={3} sx={{ borderRadius: 4 }}>
-                        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
-                            <Avatar sx={{ bgcolor: userRole === 'admin' ? '#e8f5e9' : '#eceff1', color: userRole === 'admin' ? '#2e7d32' : '#90a4ae', width: 60, height: 60 }}>
-                                {userRole === 'admin' ? <AttachMoney fontSize="large" /> : <Lock fontSize="large" />}
-                            </Avatar>
-                            <Box>
-                                {userRole === 'admin' ? (
+                {/* TABS DE ADMIN */}
+                {userRole === 'admin' && (
+                    <Paper sx={{ mb: 3, borderRadius: 2 }}>
+                        <Tabs 
+                            value={tabIndex} 
+                            onChange={(e, newVal) => { setTabIndex(newVal); setSelectedVendor(null); }} 
+                            indicatorColor="primary" 
+                            textColor="primary"
+                            variant="scrollable"
+                            scrollButtons="auto"
+                            allowScrollButtonsMobile
+                        >
+                            <Tab icon={<ShowChart />} label="Resumen Semanal" />
+                            <Tab icon={<Person />} label="Por Vendedor" />
+                            <Tab icon={<CalendarMonth />} label="Mensual Global" />
+                        </Tabs>
+                    </Paper>
+                )}
+
+                <Grid container spacing={3}>
+                    
+                    {/* 1. VENTAS SEMANALES */}
+                    {(userRole !== 'admin' || tabIndex === 0) && (
+                        <Grid item xs={12} lg={6}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <ShowChart color="primary" /> 
+                                    {userRole === 'admin' ? 'Ventas Globales (Semana)' : 'Mis Ventas (Semana)'}
+                                </Typography>
+                                <Divider sx={{ mb: 3 }} />
+                                {/* CONTENEDOR DE SCROLL HORIZONTAL (SOLO PARA ESTA GRÁFICA) */}
+                                <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
+                                    <div style={{ minWidth: '500px', height: '100%' }}>
+                                        {mounted && (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                    <XAxis dataKey="day" axisLine={false} tickLine={false} />
+                                                    <YAxis axisLine={false} tickLine={false} />
+                                                    <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} contentStyle={{borderRadius:'12px'}} />
+                                                    <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
+                                </div>
+                            </Paper>
+                        </Grid>
+                    )}
+
+                    {/* 2. STOCK */}
+                    {(userRole !== 'admin' || tabIndex === 0) && (
+                        <Grid item xs={12} lg={6}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <BarIcon color="action" /> Stock por Marca
+                                </Typography>
+                                <Divider sx={{ mb: 3 }} />
+                                <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
+                                    <div style={{ minWidth: '500px', height: '100%' }}>
+                                        {mounted && (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                    <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} fontSize={11} />
+                                                    <YAxis axisLine={false} tickLine={false} />
+                                                    <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
+                                                    <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
+                                                        {stats.chartData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                        ))}
+                                                    </Bar>
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
+                                </div>
+                            </Paper>
+                        </Grid>
+                    )}
+
+                    {/* 3. REPORTE POR VENDEDOR (ADMIN - TAB 1) */}
+                    {userRole === 'admin' && tabIndex === 1 && (
+                        <Grid item xs={12}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
+                                {!selectedVendor ? (
                                     <>
-                                        <Typography variant="h4" fontWeight="bold" sx={{ color: '#2e7d32' }}>{formatCurrency(stats.totalValue)}</Typography>
-                                        <Typography variant="subtitle1" color="text.secondary">Valor Inventario</Typography>
+                                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Rendimiento por Vendedor</Typography>
+                                        <Divider sx={{ mb: 3 }} />
+                                        <Grid container spacing={2}>
+                                            <Grid item xs={12} md={6}>
+                                                <div style={{ width: '100%', height: 350 }}>
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <PieChart>
+                                                            <Pie
+                                                                data={stats.salesByVendor}
+                                                                cx="50%" cy="50%"
+                                                                labelLine={false}
+                                                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                                outerRadius={100}
+                                                                fill="#8884d8"
+                                                                dataKey="value"
+                                                            >
+                                                                {stats.salesByVendor.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                                            </Pie>
+                                                            <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                                                            <Legend />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </Grid>
+                                            <Grid item xs={12} md={6}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '350px', overflowY: 'auto' }}>
+                                                    <Alert severity="info" sx={{mb: 1}}>Haz click en un vendedor para ver su detalle anual.</Alert>
+                                                    {stats.salesByVendor.map((vendor, index) => (
+                                                        <Paper 
+                                                            key={index} 
+                                                            variant="outlined" 
+                                                            onClick={() => setSelectedVendor(vendor.name)}
+                                                            sx={{ 
+                                                                p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                                cursor: 'pointer', '&:hover': { backgroundColor: '#f5f5f5', borderColor: 'primary.main' }
+                                                            }}
+                                                        >
+                                                            <Box display="flex" alignItems="center" gap={2}>
+                                                                <Avatar sx={{ bgcolor: COLORS[index % COLORS.length] }}>{vendor.name.charAt(0)}</Avatar>
+                                                                <Typography fontWeight="bold">{vendor.name}</Typography>
+                                                            </Box>
+                                                            <Typography color="success.main" fontWeight="bold">{formatCurrency(vendor.value)}</Typography>
+                                                        </Paper>
+                                                    ))}
+                                                </Box>
+                                            </Grid>
+                                        </Grid>
                                     </>
                                 ) : (
                                     <>
-                                        <Typography variant="h4" fontWeight="bold" sx={{ color: '#b0bec5' }}>----</Typography>
-                                        <Typography variant="subtitle1" color="text.secondary">Valor Oculto</Typography>
-                                    </>
-                                )}
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                    <Card elevation={3} sx={{ borderRadius: 4 }}>
-                        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 3 }}>
-                            <Avatar sx={{ bgcolor: '#fff3e0', color: '#ef6c00', width: 60, height: 60 }}><Warning fontSize="large" /></Avatar>
-                            <Box>
-                                <Typography variant="h4" fontWeight="bold" sx={{ color: '#ef6c00' }}>{stats.lowStockItems}</Typography>
-                                <Typography variant="subtitle1" color="text.secondary">Alertas Stock</Typography>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-
-            {/* TABS DE ADMIN */}
-            {userRole === 'admin' && (
-                <Paper sx={{ mb: 3, borderRadius: 2 }}>
-                    <Tabs 
-                        value={tabIndex} 
-                        onChange={(e, newVal) => { setTabIndex(newVal); setSelectedVendor(null); }} 
-                        indicatorColor="primary" 
-                        textColor="primary"
-                        variant="scrollable"
-                        scrollButtons="auto"
-                        allowScrollButtonsMobile
-                    >
-                        <Tab icon={<ShowChart />} label="Resumen Semanal" />
-                        <Tab icon={<Person />} label="Por Vendedor" />
-                        <Tab icon={<CalendarMonth />} label="Mensual Global" />
-                    </Tabs>
-                </Paper>
-            )}
-
-            <Grid container spacing={3}>
-                
-                {/* 1. VENTAS SEMANALES */}
-                {(userRole !== 'admin' || tabIndex === 0) && (
-                    <Grid item xs={12} lg={6}>
-                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <ShowChart color="primary" /> 
-                                {userRole === 'admin' ? 'Ventas Globales (Semana)' : 'Mis Ventas (Semana)'}
-                            </Typography>
-                            <Divider sx={{ mb: 3 }} />
-                            {/* CONTENEDOR DE SCROLL */}
-                            <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
-                                <div style={{ minWidth: '500px', height: '100%' }}>
-                                    {mounted && (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                                                <YAxis axisLine={false} tickLine={false} />
-                                                <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} contentStyle={{borderRadius:'12px'}} />
-                                                <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </div>
-                            </div>
-                        </Paper>
-                    </Grid>
-                )}
-
-                {/* 2. STOCK */}
-                {(userRole !== 'admin' || tabIndex === 0) && (
-                    <Grid item xs={12} lg={6}>
-                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <BarIcon color="action" /> Stock por Marca
-                            </Typography>
-                            <Divider sx={{ mb: 3 }} />
-                            <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
-                                <div style={{ minWidth: '500px', height: '100%' }}>
-                                    {mounted && (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} fontSize={11} />
-                                                <YAxis axisLine={false} tickLine={false} />
-                                                <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
-                                                <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
-                                                    {stats.chartData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </div>
-                            </div>
-                        </Paper>
-                    </Grid>
-                )}
-
-                {/* 3. REPORTE POR VENDEDOR (ADMIN - TAB 1) */}
-                {userRole === 'admin' && tabIndex === 1 && (
-                    <Grid item xs={12}>
-                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
-                            {!selectedVendor ? (
-                                <>
-                                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Rendimiento por Vendedor</Typography>
-                                    <Divider sx={{ mb: 3 }} />
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12} md={6}>
-                                            <div style={{ width: '100%', height: 350 }}>
+                                        <Box display="flex" alignItems="center" gap={2} mb={2}>
+                                            <IconButton onClick={() => setSelectedVendor(null)}><ArrowBack /></IconButton>
+                                            <Typography variant="h6" fontWeight="bold">Detalle Anual de: <span style={{color: '#1976d2'}}>{selectedVendor}</span></Typography>
+                                        </Box>
+                                        <Divider sx={{ mb: 3 }} />
+                                        <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
+                                            <div style={{ minWidth: '600px', height: '100%' }}>
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                    <PieChart>
-                                                        <Pie
-                                                            data={stats.salesByVendor}
-                                                            cx="50%" cy="50%"
-                                                            labelLine={false}
-                                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                                            outerRadius={100}
-                                                            fill="#8884d8"
-                                                            dataKey="value"
-                                                        >
-                                                            {stats.salesByVendor.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                        </Pie>
-                                                        <RechartsTooltip formatter={(value) => formatCurrency(value)} />
-                                                        <Legend />
-                                                    </PieChart>
+                                                    <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                        <XAxis dataKey="name" />
+                                                        <YAxis />
+                                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
+                                                        <Area type="monotone" dataKey="total" stroke="#8884d8" fill="#8884d8" />
+                                                    </AreaChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                        </Grid>
-                                        <Grid item xs={12} md={6}>
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '350px', overflowY: 'auto' }}>
-                                                <Alert severity="info" sx={{mb: 1}}>Haz click en un vendedor para ver su detalle anual.</Alert>
-                                                {stats.salesByVendor.map((vendor, index) => (
-                                                    <Paper 
-                                                        key={index} 
-                                                        variant="outlined" 
-                                                        onClick={() => setSelectedVendor(vendor.name)}
-                                                        sx={{ 
-                                                            p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                            cursor: 'pointer', '&:hover': { backgroundColor: '#f5f5f5', borderColor: 'primary.main' }
-                                                        }}
-                                                    >
-                                                        <Box display="flex" alignItems="center" gap={2}>
-                                                            <Avatar sx={{ bgcolor: COLORS[index % COLORS.length] }}>{vendor.name.charAt(0)}</Avatar>
-                                                            <Typography fontWeight="bold">{vendor.name}</Typography>
-                                                        </Box>
-                                                        <Typography color="success.main" fontWeight="bold">{formatCurrency(vendor.value)}</Typography>
-                                                    </Paper>
-                                                ))}
-                                            </Box>
-                                        </Grid>
-                                    </Grid>
-                                </>
-                            ) : (
-                                <>
-                                    <Box display="flex" alignItems="center" gap={2} mb={2}>
-                                        <IconButton onClick={() => setSelectedVendor(null)}><ArrowBack /></IconButton>
-                                        <Typography variant="h6" fontWeight="bold">Detalle Anual de: <span style={{color: '#1976d2'}}>{selectedVendor}</span></Typography>
-                                    </Box>
-                                    <Divider sx={{ mb: 3 }} />
-                                    <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
-                                        <div style={{ minWidth: '600px', height: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                    <XAxis dataKey="name" />
-                                                    <YAxis />
-                                                    <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
-                                                    <Area type="monotone" dataKey="total" stroke="#8884d8" fill="#8884d8" />
-                                                </AreaChart>
-                                            </ResponsiveContainer>
                                         </div>
-                                    </div>
-                                </>
-                            )}
-                        </Paper>
-                    </Grid>
-                )}
+                                    </>
+                                )}
+                            </Paper>
+                        </Grid>
+                    )}
 
-                {/* 4. REPORTE MENSUAL GLOBAL (ADMIN - TAB 2) */}
-                {userRole === 'admin' && tabIndex === 2 && (
-                    <Grid item xs={12}>
-                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Tendencia Global (Año Actual)</Typography>
-                            <Divider sx={{ mb: 3 }} />
-                            <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
-                                <div style={{ minWidth: '600px', height: '100%' }}>
+                    {/* 4. REPORTE MENSUAL GLOBAL (ADMIN - TAB 2) */}
+                    {userRole === 'admin' && tabIndex === 2 && (
+                        <Grid item xs={12}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Tendencia Global (Año Actual)</Typography>
+                                <Divider sx={{ mb: 3 }} />
+                                <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
+                                    <div style={{ minWidth: '600px', height: '100%' }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                                <YAxis axisLine={false} tickLine={false} />
+                                                <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
+                                                <Bar dataKey="total" fill="#4caf50" radius={[4, 4, 0, 0]} barSize={50} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            </Paper>
+                        </Grid>
+                    )}
+
+                    {/* 🟢 CORRECCIÓN VISTA DE CAJERO */}
+                    {userRole !== 'admin' && (
+                        <Grid item xs={12}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4, mt: 3, mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
+                                <Divider sx={{ mb: 3 }} />
+                                
+                                {/* 🟢 FIX 2: Quitamos el "minWidth" para que la gráfica no force scroll horizontal */}
+                                <div style={{ width: '100%', height: 350 }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                        <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                                            <YAxis axisLine={false} tickLine={false} />
-                                            <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
-                                            <Bar dataKey="total" fill="#4caf50" radius={[4, 4, 0, 0]} barSize={50} />
-                                        </BarChart>
+                                            <XAxis dataKey="name" />
+                                            <YAxis />
+                                            <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
+                                            <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
+                                        </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
-                            </div>
-                        </Paper>
-                    </Grid>
-                )}
+                            </Paper>
+                        </Grid>
+                    )}
 
-                {/* 🟢 CORRECCIÓN VISTA DE CAJERO */}
-                {/* Se eliminó el "div" que forzaba 600px de ancho */}
-                {userRole !== 'admin' && (
-                    <Grid item xs={12}>
-                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4, mt: 3 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
-                            <Divider sx={{ mb: 3 }} />
-                            
-                            <div style={{ width: '100%', height: 350 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
-                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                        <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </Paper>
-                    </Grid>
-                )}
-
-            </Grid>
-        </Container>
+                </Grid>
+            </Container>
+        </Box>
     );
 };
 
