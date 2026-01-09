@@ -4,7 +4,7 @@ import API from '../api/axiosInstance';
 // 1. IMPORTS DE COMPONENTES UI (Material UI)
 import { 
     Container, Typography, CircularProgress, Grid, Card, CardContent, 
-    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton
 } from '@mui/material';
 
 // 2. IMPORTS DE ICONOS (Material Icons)
@@ -204,7 +204,7 @@ const StatsDashboard = () => {
     );
 
     return (
-        // 🟢 FIX DE SCROLL: Usamos un Box con altura fija y overflow auto para forzar scrollbar
+        // Contenedor principal con Scroll vertical activado para que todo quepa
         <Box sx={{ height: '88vh', overflowY: 'auto', pb: 5 }}>
             <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
                 {/* CABECERA */}
@@ -302,7 +302,7 @@ const StatsDashboard = () => {
                                     {userRole === 'admin' ? 'Ventas Globales (Semana)' : 'Mis Ventas (Semana)'}
                                 </Typography>
                                 <Divider sx={{ mb: 3 }} />
-                                {/* CONTENEDOR DE SCROLL HORIZONTAL (SOLO PARA ESTA GRÁFICA) */}
+                                {/* Scroll horizontal solo si es necesario en pantallas muy pequeñas */}
                                 <div style={{ width: '100%', height: 350, overflowX: 'auto', overflowY: 'hidden' }}> 
                                     <div style={{ minWidth: '500px', height: '100%' }}>
                                         {mounted && (
@@ -419,7 +419,7 @@ const StatsDashboard = () => {
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                        <XAxis dataKey="name" />
+                                                        <XAxis dataKey="name" interval={0} tick={{fontSize: 12}} />
                                                         <YAxis />
                                                         <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
                                                         <Area type="monotone" dataKey="total" stroke="#8884d8" fill="#8884d8" />
@@ -444,7 +444,7 @@ const StatsDashboard = () => {
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} />
                                                 <YAxis axisLine={false} tickLine={false} />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
                                                 <Bar dataKey="total" fill="#4caf50" radius={[4, 4, 0, 0]} barSize={50} />
@@ -463,12 +463,12 @@ const StatsDashboard = () => {
                                 <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
                                 <Divider sx={{ mb: 3 }} />
                                 
-                                {/* 🟢 FIX 2: Quitamos el "minWidth" para que la gráfica no force scroll horizontal */}
                                 <div style={{ width: '100%', height: 350 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis dataKey="name" />
+                                            {/* 🟢 MAGIA AQUÍ: interval={0} obliga a mostrar todos los meses */}
+                                            <XAxis dataKey="name" interval={0} tick={{ fontSize: 12 }} />
                                             <YAxis />
                                             <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
                                             <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
