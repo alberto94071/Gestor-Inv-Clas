@@ -19,36 +19,8 @@ import {
     ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend
 } from 'recharts';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ff5722', '#795548'];
-
-// 🟢 4. COMPONENTE DE BARRA PERSONALIZADA (CORREGIDO)
-// Este componente dibuja cada barra con una punta triangular arriba
-const CustomPencilBar = (props) => {
-    // Desestructuramos las props que envía Recharts
-    const { fill, x, y, width, height } = props;
-
-    // Protección: si la barra es muy pequeña o los datos no están listos, no dibujar nada
-    if (!width || !height || height < 2) return null;
-
-    // 💡 TRUCO: Si 'fill' llega undefined, usamos un color por defecto (azul)
-    // Esto evita que la barra sea invisible si falla la conexión con <Cell>
-    const color = fill || '#0088FE';
-
-    // Calculamos la altura de la punta (triángulo superior)
-    const tipHeight = width / 2;
-
-    // Coordenadas del SVG para dibujar el lápiz
-    const path = `
-        M${x},${y + height}           // Punto A: Abajo Izquierda
-        L${x},${y + tipHeight}        // Punto B: Hombro Izquierdo
-        L${x + width / 2},${y}        // Punto C: Punta (Centro Arriba)
-        L${x + width},${y + tipHeight} // Punto D: Hombro Derecho
-        L${x + width},${y + height}   // Punto E: Abajo Derecha
-        Z                             // Cerrar figura
-    `;
-
-    return <path d={path} stroke="none" fill={color} />;
-};
+// PALETA DE COLORES (Estilo "Analytics Lane" - Vibrantes y Distintos)
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#ff5722', '#3f51b5', '#e91e63'];
 
 const StatsDashboard = () => {
     const [inventory, setInventory] = useState([]);
@@ -351,7 +323,7 @@ const StatsDashboard = () => {
                         </Grid>
                     )}
 
-                    {/* 2. STOCK - APLICANDO LÁPIZ */}
+                    {/* 2. STOCK - BARRAS ESTÁNDAR MULTICOLOR */}
                     {(userRole !== 'admin' || tabIndex === 0) && (
                         <Grid item xs={12} lg={6}>
                             <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
@@ -367,9 +339,9 @@ const StatsDashboard = () => {
                                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                     <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} fontSize={11} />
                                                     <YAxis axisLine={false} tickLine={false} />
-                                                    <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
-                                                    {/* 🟢 CORRECCIÓN: shape como función para pasar props correctamente */}
-                                                    <Bar dataKey="stock" shape={(props) => <CustomPencilBar {...props} />} barSize={40}>
+                                                    <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} cursor={{fill: 'transparent'}} />
+                                                    {/* 🟢 SIN SHAPE: Barra normal con mapeo de colores */}
+                                                    <Bar dataKey="stock" barSize={40} radius={[4, 4, 0, 0]}>
                                                         {stats.chartData.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                         ))}
@@ -447,13 +419,13 @@ const StatsDashboard = () => {
                                         <div style={{ width: '100%', height: 400, overflowX: 'auto' }}>
                                             <div style={{ minWidth: '600px', height: '100%' }}>
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                    {/* 🟢 DETALLE VENDEDOR CON LÁPIZ (Corregido) */}
+                                                    {/* 🟢 DETALLE VENDEDOR - BARRAS ESTÁNDAR */}
                                                     <BarChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                         <XAxis dataKey="name" interval={0} tick={{fontSize: 12}} />
                                                         <YAxis />
-                                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
-                                                        <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={50}>
+                                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} cursor={{fill: 'transparent'}} />
+                                                        <Bar dataKey="total" barSize={50} radius={[4, 4, 0, 0]}>
                                                             {stats.vendorMonthlyDetail.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                                         </Bar>
                                                     </BarChart>
@@ -475,13 +447,13 @@ const StatsDashboard = () => {
                                 <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
                                     <div style={{ minWidth: '600px', height: '100%' }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            {/* 🟢 GLOBAL ADMIN CON LÁPIZ (Corregido) */}
+                                            {/* 🟢 GLOBAL ADMIN - BARRAS ESTÁNDAR */}
                                             <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} />
                                                 <YAxis axisLine={false} tickLine={false} />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
-                                                <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={50}>
+                                                <Bar dataKey="total" barSize={50} radius={[4, 4, 0, 0]}>
                                                     {stats.salesByMonth.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                                 </Bar>
                                             </BarChart>
@@ -492,7 +464,7 @@ const StatsDashboard = () => {
                         </Grid>
                     )}
 
-                    {/* 🟢 5. CORRECCIÓN VISTA DE CAJERO: GIGANTE Y CON LÁPIZ */}
+                    {/* 🟢 5. VISTA DE CAJERO - BARRAS ESTÁNDAR */}
                     {userRole !== 'admin' && (
                         <Grid item xs={12}>
                             <Paper elevation={3} sx={{ p: 3, borderRadius: 4, mt: 3, mb: 2 }}>
@@ -502,14 +474,12 @@ const StatsDashboard = () => {
                                 <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '10px' }}>
                                     <div style={{ minWidth: '1200px', height: 500 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            {/* CAMBIAMOS AreaChart POR BarChart para usar el lápiz */}
                                             <BarChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                 <XAxis dataKey="name" interval={0} tick={{ fontSize: 13 }} />
                                                 <YAxis />
-                                                <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                                {/* 🟢 CORRECCIÓN: shape como función */}
-                                                <Bar dataKey="total" shape={(props) => <CustomPencilBar {...props} />} barSize={60}>
+                                                <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} cursor={{fill: 'transparent'}} />
+                                                <Bar dataKey="total" barSize={60} radius={[5, 5, 0, 0]}>
                                                     {stats.vendorMonthlyDetail.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                     ))}
