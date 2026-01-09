@@ -2,32 +2,39 @@ import React, { useState, useEffect, useMemo } from 'react';
 import API from '../api/axiosInstance';
 import { 
     Container, Typography, CircularProgress, Grid, Card, CardContent, 
-    Box, Avatar, Paper, Divider 
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert
 } from '@mui/material';
 import { 
     Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon, 
-    ShowChart, Lock 
+    ShowChart, Lock, Person, CalendarMonth, Assessment
 } from '@mui/icons-material';
 
-// --- IMPORTAMOS RECHARTS ---
+// --- IMPORTAMOS RECHARTS (Agregamos PieChart y Legend) ---
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-    ResponsiveContainer, Cell, LineChart, Line 
+    ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend
 } from 'recharts';
+
+// Colores para las gráficas
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 const StatsDashboard = () => {
     const [inventory, setInventory] = useState([]);
     const [salesHistory, setSalesHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [userRole, setUserRole] = useState('');
     
-    // 🟢 ESTADO PARA CORREGIR ERROR DE ANCHO/ALTO (-1)
+    // Datos del Usuario
+    const [userRole, setUserRole] = useState('');
+    const [userName, setUserName] = useState('');
+
+    // Estado para las Pestañas (Solo Admin)
+    const [tabIndex, setTabIndex] = useState(0);
+    
+    // Estado para montaje de gráficas
     const [mounted, setMounted] = useState(false);
 
-    useEffect(() => {
-        setMounted(true); // Activa la bandera de montaje
-    }, []);
+    useEffect(() => { setMounted(true); }, []);
 
     // 1. Cargar datos
     useEffect(() => {
@@ -35,11 +42,14 @@ const StatsDashboard = () => {
             try {
                 const token = localStorage.getItem('authToken');
                 
-                // Obtener Rol
+                // Obtener Datos del Usuario (Rol y Nombre para filtrar)
                 const userStr = localStorage.getItem('user');
                 if (userStr) {
                     const userData = JSON.parse(userStr);
-                    setUserRole(userData.rol || '');
+                    // Normalizamos a minúsculas para evitar errores
+                    setUserRole((userData.rol || '').toLowerCase());
+                    // Guardamos el nombre tal cual viene para comparar con el historial
+                    setUserName(userData.nombre || userData.username || '');
                 }
 
                 // Cargar Inventario
@@ -68,40 +78,45 @@ const StatsDashboard = () => {
         fetchData();
     }, []);
 
-    // 🟢 FUNCIÓN DE AYUDA PARA LEER TUS FECHAS (DD-MM-YYYY)
+    // Helper: Parsear Fechas
     const parseCustomDate = (dateString) => {
         if (!dateString) return new Date();
-        // Si ya es ISO (contiene T o guiones formato año primero), dejarlo pasar
         if (dateString.includes('T') || dateString.match(/^\d{4}-/)) return new Date(dateString);
-        
-        // Si es formato DD-MM-YYYY HH:mm (Tu formato)
         try {
-            const parts = dateString.split(' '); // Separar fecha de hora
-            const dateParts = parts[0].split('-'); // [20, 12, 2025]
+            const parts = dateString.split(' '); 
+            const dateParts = parts[0].split('-'); 
             if (dateParts.length === 3) {
-                // new Date(Año, Mes (0-11), Día)
                 return new Date(dateParts[2], parseInt(dateParts[1]) - 1, dateParts[0]);
             }
-        } catch (e) {
-            return new Date();
-        }
+        } catch (e) { return new Date(); }
         return new Date(dateString);
     };
 
-    // 2. Calcular Estadísticas (AQUÍ ESTÁ LA NUEVA LÓGICA)
-    const stats = useMemo(() => {
-        if (!inventory.length) return { totalProducts: 0, totalValue: 0, lowStockItems: 0, chartData: [], salesData: [] };
+    // Helper: Moneda
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('es-GT', {
+            style: 'currency', currency: 'GTQ', minimumFractionDigits: 2
+        }).format(amount);
+    };
 
-        // --- KPI: Inventario ---
+    // 2. CÁLCULOS ESTADÍSTICOS (SUPER PODEROSOS ⚡)
+    const stats = useMemo(() => {
+        if (!inventory.length && !salesHistory.length) 
+            return { totalProducts: 0, totalValue: 0, lowStockItems: 0, chartData: [], salesData: [], salesByVendor: [], salesByMonth: [] };
+
+        const isAdmin = userRole === 'admin';
+
+        // --- A. KPI INVENTARIO (Global) ---
         const totalProducts = inventory.length;
-        const totalValue = inventory.reduce((acc, item) => {
+        // Solo calculamos valor total si es admin (optimización)
+        const totalValue = isAdmin ? inventory.reduce((acc, item) => {
             const precio = parseFloat(item.precio_venta) || 0;
             const cantidad = parseInt(item.cantidad) || 0;
             return acc + (precio * cantidad);
-        }, 0);
+        }, 0) : 0;
         const lowStockItems = inventory.filter(item => (parseInt(item.cantidad) || 0) < 5).length;
         
-        // --- GRÁFICA 1: STOCK POR MARCA ---
+        // --- B. STOCK POR MARCA (Global) ---
         const brandMap = {};
         inventory.forEach(item => {
             const brand = item.marca ? item.marca.toUpperCase() : 'OTROS';
@@ -110,61 +125,83 @@ const StatsDashboard = () => {
             brandMap[brand] += qty;
         });
         const chartData = Object.keys(brandMap).map(key => ({
-            name: key,
-            stock: brandMap[key]
+            name: key, stock: brandMap[key]
         })).sort((a, b) => b.stock - a.stock).slice(0, 8); 
 
-        // --- GRÁFICA 2: VENTAS DE LA SEMANA ACTUAL (Lunes a Domingo) ---
-        const daysMap = {
-            'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0, 'Domingo': 0
-        };
+        // --- C. FILTRADO DE VENTAS SEGÚN ROL ---
+        // Si es Admin: Toma TODAS las ventas.
+        // Si es Cajero: Toma SOLO las ventas donde vendedor === userName
+        const relevantSales = isAdmin 
+            ? salesHistory 
+            : salesHistory.filter(s => s.vendedor === userName);
 
-        // 1. Calcular el Lunes de esta semana (00:00:00)
+        // --- D. VENTAS DE LA SEMANA (Dinámicas según el rol) ---
+        const daysMap = { 'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0, 'Domingo': 0 };
         const today = new Date();
-        const currentDay = today.getDay(); // 0 (Dom) - 6 (Sab)
-        // Ajuste: Si es Domingo (0), restamos 6 días para llegar al Lunes. Si no, restamos (dia - 1).
+        const currentDay = today.getDay(); 
         const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1); 
         const mondayOfThisWeek = new Date(today.setDate(diff));
         mondayOfThisWeek.setHours(0, 0, 0, 0);
 
-        salesHistory.forEach(sale => {
-            // Soportar ambos nombres de campo por compatibilidad
+        relevantSales.forEach(sale => {
             const rawDate = sale.fecha_hora || sale.fecha_venta;
-            
             if (rawDate) {
                 const date = parseCustomDate(rawDate);
-                
-                // 🟢 FILTRO NUEVO: Solo sumar si la venta es >= al Lunes de esta semana
                 if (date >= mondayOfThisWeek) {
-                    const dayIndex = date.getDay(); // 0 = Domingo
+                    const dayIndex = date.getDay(); 
                     const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
                     const dayName = dayNames[dayIndex];
-                    
                     if (daysMap[dayName] !== undefined) {
-                        const totalVenta = parseFloat(sale.totalVenta || sale.totalventa || (sale.precio_unitario * sale.cantidad));
-                        daysMap[dayName] += totalVenta;
+                        const total = parseFloat(sale.totalVenta || sale.totalventa || (sale.precio_unitario * sale.cantidad));
+                        daysMap[dayName] += total;
                     }
                 }
             }
         });
-
         const orderedDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-        const salesData = orderedDays.map(day => ({
-            day: day,
-            total: daysMap[day] || 0
-        }));
+        const salesData = orderedDays.map(day => ({ day: day, total: daysMap[day] || 0 }));
 
-        return { totalProducts, totalValue, lowStockItems, chartData, salesData };
-    }, [inventory, salesHistory]);
+        // --- E. REPORTES AVANZADOS (SOLO ADMIN) ---
+        let salesByVendor = [];
+        let salesByMonth = [];
 
-    // Helper moneda
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-GT', {
-            style: 'currency',
-            currency: 'GTQ',
-            minimumFractionDigits: 2
-        }).format(amount);
-    };
+        if (isAdmin) {
+            // 1. Por Vendedor
+            const vendorMap = {};
+            salesHistory.forEach(sale => {
+                const vendedor = sale.vendedor || 'Desconocido';
+                const total = parseFloat(sale.totalVenta || sale.totalventa || 0);
+                if (!vendorMap[vendedor]) vendorMap[vendedor] = 0;
+                vendorMap[vendedor] += total;
+            });
+            salesByVendor = Object.keys(vendorMap).map(key => ({
+                name: key, value: vendorMap[key]
+            })).sort((a, b) => b.value - a.value);
+
+            // 2. Por Mes (Año actual)
+            const monthMap = {};
+            const currentYear = new Date().getFullYear();
+            const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            
+            // Inicializar meses en 0
+            months.forEach(m => monthMap[m] = 0);
+
+            salesHistory.forEach(sale => {
+                const rawDate = sale.fecha_hora || sale.fecha_venta;
+                if (rawDate) {
+                    const date = parseCustomDate(rawDate);
+                    if (date.getFullYear() === currentYear) {
+                        const monthName = months[date.getMonth()];
+                        const total = parseFloat(sale.totalVenta || sale.totalventa || 0);
+                        monthMap[monthName] += total;
+                    }
+                }
+            });
+            salesByMonth = months.map(m => ({ name: m, total: monthMap[m] }));
+        }
+
+        return { totalProducts, totalValue, lowStockItems, chartData, salesData, salesByVendor, salesByMonth };
+    }, [inventory, salesHistory, userRole, userName]);
 
     if (loading) return (
         <Container sx={{ mt: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -181,11 +218,18 @@ const StatsDashboard = () => {
     return (
         <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
             {/* TÍTULO */}
-            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <TrendingUp fontSize="large" color="primary" />
-                <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                    Resumen del Negocio
-                </Typography>
+            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <TrendingUp fontSize="large" color="primary" />
+                    <Box>
+                        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                            {userRole === 'admin' ? 'Dashboard Gerencial' : 'Mi Resumen de Ventas'}
+                        </Typography>
+                        <Typography variant="subtitle2" color="textSecondary">
+                            Bienvenido, {userName}
+                        </Typography>
+                    </Box>
+                </Box>
             </Box>
 
             {/* KPI CARDS */}
@@ -196,7 +240,7 @@ const StatsDashboard = () => {
                             <Avatar sx={{ bgcolor: '#e3f2fd', color: '#1976d2', width: 60, height: 60 }}><Inventory fontSize="large" /></Avatar>
                             <Box>
                                 <Typography variant="h4" fontWeight="bold">{stats.totalProducts}</Typography>
-                                <Typography variant="subtitle1" color="text.secondary">Productos Únicos</Typography>
+                                <Typography variant="subtitle1" color="text.secondary">Productos en Sistema</Typography>
                             </Box>
                         </CardContent>
                     </Card>
@@ -212,12 +256,12 @@ const StatsDashboard = () => {
                                 {userRole === 'admin' ? (
                                     <>
                                         <Typography variant="h4" fontWeight="bold" sx={{ color: '#2e7d32' }}>{formatCurrency(stats.totalValue)}</Typography>
-                                        <Typography variant="subtitle1" color="text.secondary">Valor Inventario</Typography>
+                                        <Typography variant="subtitle1" color="text.secondary">Valor Total Inventario</Typography>
                                     </>
                                 ) : (
                                     <>
                                         <Typography variant="h4" fontWeight="bold" sx={{ color: '#b0bec5' }}>----</Typography>
-                                        <Typography variant="subtitle1" color="text.secondary">Información Reservada</Typography>
+                                        <Typography variant="subtitle1" color="text.secondary">Valor Inventario (Oculto)</Typography>
                                     </>
                                 )}
                             </Box>
@@ -238,66 +282,161 @@ const StatsDashboard = () => {
                 </Grid>
             </Grid>
 
-            {/* GRÁFICAS */}
+            {/* SECCIÓN DE GRÁFICAS CON TABS PARA ADMIN */}
+            {userRole === 'admin' && (
+                <Paper sx={{ mb: 3, borderRadius: 2 }}>
+                    <Tabs 
+                        value={tabIndex} 
+                        onChange={(e, newVal) => setTabIndex(newVal)} 
+                        indicatorColor="primary" 
+                        textColor="primary"
+                        variant="fullWidth"
+                    >
+                        <Tab icon={<ShowChart />} label="Resumen Semanal" />
+                        <Tab icon={<Person />} label="Por Vendedor" />
+                        <Tab icon={<CalendarMonth />} label="Mensual (Año Actual)" />
+                    </Tabs>
+                </Paper>
+            )}
+
+            {/* CONTENIDO DE GRÁFICAS */}
             <Grid container spacing={3}>
                 
-                {/* VENTAS POR DÍA */}
-                <Grid item xs={12} lg={6}>
-                    <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <ShowChart color="primary" /> Ventas de esta Semana
-                        </Typography>
-                        <Divider sx={{ mb: 3 }} />
-                        
-                        <div style={{ width: '99%', height: 350 }}> 
-                            {mounted && (
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                    <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
-                                        <YAxis axisLine={false} tickLine={false} />
-                                        <RechartsTooltip 
-                                            formatter={(value) => [formatCurrency(value), 'Venta Total']}
-                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                        />
-                                        <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </Paper>
-                </Grid>
+                {/* 1. VENTAS SEMANALES (VISIBLE SIEMPRE, PERO FILTRADA POR ROL) */}
+                {(userRole !== 'admin' || tabIndex === 0) && (
+                    <Grid item xs={12} lg={6}>
+                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <ShowChart color="primary" /> 
+                                {userRole === 'admin' ? 'Ventas Globales (Esta Semana)' : 'Mis Ventas (Esta Semana)'}
+                            </Typography>
+                            <Divider sx={{ mb: 3 }} />
+                            <div style={{ width: '99%', height: 350 }}> 
+                                {mounted && (
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                        <LineChart data={stats.salesData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                            <YAxis axisLine={false} tickLine={false} />
+                                            <RechartsTooltip 
+                                                formatter={(value) => [formatCurrency(value), 'Venta']}
+                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            />
+                                            <Line type="monotone" dataKey="total" stroke="#2196f3" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+                        </Paper>
+                    </Grid>
+                )}
 
-                {/* STOCK POR MARCA */}
-                <Grid item xs={12} lg={6}>
-                    <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <BarIcon color="action" /> Stock por Marca (Top 8)
-                        </Typography>
-                        <Divider sx={{ mb: 3 }} />
-                        
-                        <div style={{ width: '99%', height: 350 }}> 
-                            {mounted && (
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                    <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                {/* 2. STOCK POR MARCA (VISIBLE SIEMPRE EN TAB 0 O PARA CAJERO) */}
+                {(userRole !== 'admin' || tabIndex === 0) && (
+                    <Grid item xs={12} lg={6}>
+                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <BarIcon color="action" /> Stock por Marca (Top 8)
+                            </Typography>
+                            <Divider sx={{ mb: 3 }} />
+                            <div style={{ width: '99%', height: 350 }}> 
+                                {mounted && (
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                        <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                            <YAxis axisLine={false} tickLine={false} />
+                                            <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
+                                            <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
+                                                {stats.chartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+                        </Paper>
+                    </Grid>
+                )}
+
+                {/* 3. REPORTE POR VENDEDOR (SOLO ADMIN - TAB 1) */}
+                {userRole === 'admin' && tabIndex === 1 && (
+                    <Grid item xs={12}>
+                         
+                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Rendimiento por Vendedor</Typography>
+                            <Divider sx={{ mb: 3 }} />
+                            <Grid container spacing={2}>
+                                {/* Gráfica Pastel */}
+                                <Grid item xs={12} md={6}>
+                                    <div style={{ width: '100%', height: 350 }}>
+                                        <ResponsiveContainer>
+                                            <PieChart>
+                                                <Pie
+                                                    data={stats.salesByVendor}
+                                                    cx="50%" cy="50%"
+                                                    labelLine={false}
+                                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                    outerRadius={120}
+                                                    fill="#8884d8"
+                                                    dataKey="value"
+                                                >
+                                                    {stats.salesByVendor.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </Grid>
+                                {/* Lista Detallada */}
+                                <Grid item xs={12} md={6}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '350px', overflowY: 'auto' }}>
+                                        {stats.salesByVendor.map((vendor, index) => (
+                                            <Paper key={index} variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <Box display="flex" alignItems="center" gap={2}>
+                                                    <Avatar sx={{ bgcolor: COLORS[index % COLORS.length] }}>{vendor.name.charAt(0)}</Avatar>
+                                                    <Typography fontWeight="bold">{vendor.name}</Typography>
+                                                </Box>
+                                                <Typography color="success.main" fontWeight="bold">{formatCurrency(vendor.value)}</Typography>
+                                            </Paper>
+                                        ))}
+                                        {stats.salesByVendor.length === 0 && <Alert severity="info">No hay ventas registradas.</Alert>}
+                                    </Box>
+                                </Grid>
+                            </Grid>
+                        </Paper>
+                    </Grid>
+                )}
+
+                {/* 4. REPORTE MENSUAL (SOLO ADMIN - TAB 2) */}
+                {userRole === 'admin' && tabIndex === 2 && (
+                    <Grid item xs={12}>
+                         
+                        <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Tendencia de Ventas (Año Actual)</Typography>
+                            <Divider sx={{ mb: 3 }} />
+                            <div style={{ width: '100%', height: 400 }}>
+                                <ResponsiveContainer>
+                                    <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} />
                                         <YAxis axisLine={false} tickLine={false} />
                                         <RechartsTooltip 
-                                            formatter={(value) => [`${value} Unidades`, 'Stock']}
-                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            formatter={(value) => [formatCurrency(value), 'Total Vendido']}
+                                            cursor={{fill: 'transparent'}}
                                         />
-                                        <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
-                                            {stats.chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={['#3f51b5', '#009688', '#ff9800', '#f44336', '#9c27b0', '#795548', '#607d8b', '#e91e63'][index % 8]} />
-                                            ))}
-                                        </Bar>
+                                        <Bar dataKey="total" fill="#4caf50" radius={[4, 4, 0, 0]} barSize={50} />
                                     </BarChart>
                                 </ResponsiveContainer>
-                            )}
-                        </div>
-                    </Paper>
-                </Grid>
+                            </div>
+                        </Paper>
+                    </Grid>
+                )}
+
             </Grid>
         </Container>
     );
