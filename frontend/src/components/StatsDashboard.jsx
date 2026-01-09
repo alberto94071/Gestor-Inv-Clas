@@ -16,10 +16,35 @@ import {
 // 3. IMPORTS DE GRÁFICAS (Recharts)
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-    ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend, AreaChart, Area
+    ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend
 } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ff5722', '#795548'];
+
+// 🟢 4. COMPONENTE DE BARRA PERSONALIZADA (FORMA DE LÁPIZ/FLECHA)
+// Este componente dibuja cada barra con una punta triangular arriba
+const CustomPencilBar = (props) => {
+    const { fill, x, y, width, height } = props;
+
+    // Calculamos la altura de la punta (triángulo superior)
+    // Usamos la mitad del ancho para que sea simétrico
+    const tipHeight = width / 2;
+
+    // Protección por si la barra es muy pequeña (evita errores visuales)
+    if (height < 2) return null;
+
+    // Coordenadas del SVG para dibujar el lápiz
+    const path = `
+        M${x},${y + height}           // Punto A: Abajo Izquierda
+        L${x},${y + tipHeight}        // Punto B: Hombro Izquierdo
+        L${x + width / 2},${y}        // Punto C: Punta (Centro Arriba)
+        L${x + width},${y + tipHeight} // Punto D: Hombro Derecho
+        L${x + width},${y + height}   // Punto E: Abajo Derecha
+        Z                             // Cerrar figura
+    `;
+
+    return <path d={path} stroke="none" fill={fill} />;
+};
 
 const StatsDashboard = () => {
     const [inventory, setInventory] = useState([]);
@@ -204,7 +229,7 @@ const StatsDashboard = () => {
     );
 
     return (
-        // Contenedor principal con Scroll vertical activado para que todo quepa
+        // Contenedor principal con Scroll vertical activado
         <Box sx={{ height: '88vh', overflowY: 'auto', pb: 5 }}>
             <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
                 {/* CABECERA */}
@@ -322,7 +347,7 @@ const StatsDashboard = () => {
                         </Grid>
                     )}
 
-                    {/* 2. STOCK */}
+                    {/* 2. STOCK - APLICANDO LÁPIZ */}
                     {(userRole !== 'admin' || tabIndex === 0) && (
                         <Grid item xs={12} lg={6}>
                             <Paper elevation={3} sx={{ p: 3, borderRadius: 4, height: '100%' }}>
@@ -339,7 +364,8 @@ const StatsDashboard = () => {
                                                     <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} fontSize={11} />
                                                     <YAxis axisLine={false} tickLine={false} />
                                                     <RechartsTooltip formatter={(value) => [`${value} Unid.`, 'Stock']} />
-                                                    <Bar dataKey="stock" radius={[6, 6, 0, 0]} barSize={40}>
+                                                    {/* 🟢 APLICAMOS FORMA DE LÁPIZ */}
+                                                    <Bar dataKey="stock" shape={<CustomPencilBar />} barSize={40}>
                                                         {stats.chartData.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                         ))}
@@ -414,16 +440,19 @@ const StatsDashboard = () => {
                                             <Typography variant="h6" fontWeight="bold">Detalle Anual de: <span style={{color: '#1976d2'}}>{selectedVendor}</span></Typography>
                                         </Box>
                                         <Divider sx={{ mb: 3 }} />
-                                        <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
+                                        <div style={{ width: '100%', height: 400, overflowX: 'auto' }}>
                                             <div style={{ minWidth: '600px', height: '100%' }}>
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                    <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                                    {/* 🟢 DETALLE VENDEDOR CON LÁPIZ */}
+                                                    <BarChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                         <XAxis dataKey="name" interval={0} tick={{fontSize: 12}} />
                                                         <YAxis />
                                                         <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} />
-                                                        <Area type="monotone" dataKey="total" stroke="#8884d8" fill="#8884d8" />
-                                                    </AreaChart>
+                                                        <Bar dataKey="total" shape={<CustomPencilBar />} barSize={50}>
+                                                            {stats.vendorMonthlyDetail.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                                        </Bar>
+                                                    </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
                                         </div>
@@ -442,12 +471,15 @@ const StatsDashboard = () => {
                                 <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
                                     <div style={{ minWidth: '600px', height: '100%' }}>
                                         <ResponsiveContainer width="100%" height="100%">
+                                            {/* 🟢 GLOBAL ADMIN CON LÁPIZ */}
                                             <BarChart data={stats.salesByMonth} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} />
                                                 <YAxis axisLine={false} tickLine={false} />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
-                                                <Bar dataKey="total" fill="#4caf50" radius={[4, 4, 0, 0]} barSize={50} />
+                                                <Bar dataKey="total" shape={<CustomPencilBar />} barSize={50}>
+                                                    {stats.salesByMonth.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                                </Bar>
                                             </BarChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -456,25 +488,29 @@ const StatsDashboard = () => {
                         </Grid>
                     )}
 
-                    {/* 🟢 CORRECCIÓN VISTA DE CAJERO */}
+                    {/* 🟢 5. CORRECCIÓN VISTA DE CAJERO: GIGANTE Y CON LÁPIZ */}
                     {userRole !== 'admin' && (
                         <Grid item xs={12}>
                             <Paper elevation={3} sx={{ p: 3, borderRadius: 4, mt: 3, mb: 2 }}>
                                 <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Mi Desempeño Anual</Typography>
                                 <Divider sx={{ mb: 3 }} />
                                 
-                                {/* 🟢 CONTENEDOR CON SCROLL HORIZONTAL */}
                                 <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '10px' }}>
-                                    {/* 🟢 GRÁFICA GIGANTE (1200px de ancho) PARA QUE SE VEA BIEN EXPANDIDA */}
                                     <div style={{ minWidth: '1200px', height: 500 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                                            {/* CAMBIAMOS AreaChart POR BarChart para usar el lápiz */}
+                                            <BarChart data={stats.vendorMonthlyDetail} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                 <XAxis dataKey="name" interval={0} tick={{ fontSize: 13 }} />
                                                 <YAxis />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Mis Ventas']} />
-                                                <Area type="monotone" dataKey="total" stroke="#ff9800" fill="#ff9800" fillOpacity={0.3} />
-                                            </AreaChart>
+                                                {/* Aplicamos CustomPencilBar y colores aleatorios */}
+                                                <Bar dataKey="total" shape={<CustomPencilBar />} barSize={60}>
+                                                    {stats.vendorMonthlyDetail.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
                                         </ResponsiveContainer>
                                     </div>
                                 </div>
