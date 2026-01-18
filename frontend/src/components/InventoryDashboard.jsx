@@ -234,8 +234,15 @@ const InventoryDashboard = () => {
                 <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2c3e50' }}>
                     📦 Inventario
                 </Typography>
-                <Button variant="contained" startIcon={<Add />} onClick={handleOpenCreate} sx={{ borderRadius: 2, px: 3 }}>
-                    Nuevo Producto
+                {/* 🟢 BOTÓN BLOQUEADO PARA CAJEROS */}
+                <Button 
+                    variant="contained" 
+                    startIcon={<Add />} 
+                    onClick={handleOpenCreate} 
+                    disabled={userRole !== 'admin'}
+                    sx={{ borderRadius: 2, px: 3 }}
+                >
+                    {userRole === 'admin' ? 'Nuevo Producto' : 'Solo Administrador'}
                 </Button>
             </Box>
 
@@ -357,7 +364,7 @@ const InventoryDashboard = () => {
                 <DialogContent><DialogContentText>Código <strong>{scannedCode}</strong> no existe. ¿Registrar?</DialogContentText></DialogContent>
                 <DialogActions>
                     <Button onClick={() => setConfirmNewOpen(false)} color="secondary">Cancelar</Button>
-                    <Button onClick={handleCreateFromScan} variant="contained" autoFocus>Registrar</Button>
+                    <Button onClick={handleCreateFromScan} variant="contained" autoFocus disabled={userRole !== 'admin'}>Registrar</Button>
                 </DialogActions>
             </Dialog>
 
@@ -433,7 +440,6 @@ const InventoryDashboard = () => {
                                 </IconButton>
 
                                 {currentGalleryProduct.imagen_url ? (
-                                    // 🟢 PARA LA GALERÍA GRANDE USAMOS f_auto PERO SIN REDUCIR EL TAMAÑO (Para que se vea nítida)
                                     <img 
                                         src={getOptimizedImageUrl(currentGalleryProduct.imagen_url, 1000)} 
                                         alt="Detalle" 
