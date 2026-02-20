@@ -18,7 +18,7 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // URL del logo proporcionada
-const LOGO_URL = "https://res.cloudinary.com/dbwlqg4tp/image/upload/v1766103448/WhatsApp_Image_2025-12-18_at_6.17.02_PM_pb42fb.jpg";
+const LOGO_URL = "https://res.cloudinary.com/dysps3d7k/image/upload/v1770765995/rtsz9gfye5xiwha8uywz.jpg";
 
 const drawerWidth = 240;
 
