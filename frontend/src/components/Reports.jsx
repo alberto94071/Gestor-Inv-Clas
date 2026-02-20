@@ -304,7 +304,7 @@ const Reports = () => {
                     <tbody>
                         ${saleRow.items.map(item => `
                             <tr>
-                                <td style="padding-top:4px;">${item.producto.substring(0,18)}${item.codigo ? `<br/><span style="font-size:9px">(${item.codigo})</span>` : ''}</td>
+                                <td style="padding-top:4px;">${item.producto.substring(0,25)}</td>
                                 <td align="center" style="padding-top:4px;">${item.cantidad}</td>
                                 <td align="right" style="padding-top:4px;">Q${(Number(item.precio_unitario) * Number(item.cantidad)).toFixed(2)}</td>
                             </tr>
