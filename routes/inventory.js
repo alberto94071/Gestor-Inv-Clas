@@ -68,13 +68,13 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
 router.get('/inventory', authenticateToken, async (req, res) => {
     try {
         const query = `
-            SELECT 
-                p.id, p.nombre, p.marca, p.descripcion, p.precio_venta, 
+            SELECT
+                p.id, p.nombre, p.marca, p.descripcion, p.precio_venta, p.precio_oferta,
                 p.talla, p.color, p.codigo_barras, p.imagen_url, p.fecha_creacion,
                 COALESCE(i.cantidad, 0) as cantidad
             FROM productos p
             LEFT JOIN inventario i ON p.id = i.producto_id
-            ORDER BY p.id DESC; 
+            ORDER BY p.id DESC;
         `;
         const result = await db.query(query);
         return res.json(result.rows);
