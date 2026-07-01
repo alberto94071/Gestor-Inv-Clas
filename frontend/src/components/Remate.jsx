@@ -32,6 +32,7 @@ const Remate = () => {
     const [userRole, setUserRole] = useState('');
     const [selectedIds, setSelectedIds] = useState([]);
     const [bulkPct, setBulkPct] = useState('');
+    const [rowPct, setRowPct] = useState({});
     const [applying, setApplying] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: '', severity: 'success' });
 
@@ -228,11 +229,33 @@ const Remate = () => {
                                                     <Typography variant="body2" sx={{ color: 'green', fontWeight: 'bold' }}>
                                                         Q{Number(product.precio_oferta).toFixed(2)}
                                                     </Typography>
+                                                    {isAdmin && (
+                                                        <Button size="small" color="error" disabled={applying} onClick={() => removeDiscount([product.id])}>
+                                                            Quitar
+                                                        </Button>
+                                                    )}
                                                 </Box>
                                             ) : (
-                                                <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
-                                                    Q{Number(product.precio_venta).toFixed(2)}
-                                                </Typography>
+                                                <Box>
+                                                    <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                        Q{Number(product.precio_venta).toFixed(2)}
+                                                    </Typography>
+                                                    {isAdmin && (
+                                                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', mt: 0.5 }}>
+                                                            <TextField
+                                                                size="small"
+                                                                type="number"
+                                                                placeholder="%"
+                                                                value={rowPct[product.id] || ''}
+                                                                onChange={(e) => setRowPct({ ...rowPct, [product.id]: e.target.value })}
+                                                                sx={{ width: 70 }}
+                                                            />
+                                                            <IconButton size="small" color="warning" disabled={applying} onClick={() => applyDiscount([product.id], rowPct[product.id])}>
+                                                                <Sell fontSize="small" />
+                                                            </IconButton>
+                                                        </Box>
+                                                    )}
+                                                </Box>
                                             )}
                                         </TableCell>
                                         <TableCell>
