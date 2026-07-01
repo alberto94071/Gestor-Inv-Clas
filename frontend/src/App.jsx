@@ -13,6 +13,7 @@ import Reports from './components/Reports';
 import Users from './components/Users';
 import AuditLog from './components/AuditLog';
 import AdminTools from './components/AdminTools';
+import Remate from './components/Remate';
 import Footer from './components/Footer'; // 🟢 1. IMPORTAMOS EL FOOTER
 
 function App() {
@@ -112,7 +113,11 @@ function App() {
                                     <Route path="/" element={<StatsDashboard />} />
                                     <Route path="/inventory" element={<InventoryDashboard />} />
                                     <Route path="/pos" element={<PointOfSale />} />
-                                    
+
+                                    {(user?.rol === 'admin' || user?.rol === 'cajero') && (
+                                        <Route path="/remate" element={<Remate />} />
+                                    )}
+
                                     {/* Rutas solo para Admin */}
                                     {user?.rol === 'admin' && (
                                         <>

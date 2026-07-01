@@ -13,7 +13,8 @@ import {
     History,        // Icono para Auditoría
     ReceiptLong,    // Icono para Personalizar Recibo
     ExitToApp,       // Icono para Salir
-    Handyman
+    Handyman,
+    Sell            // Icono para Remate
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -32,6 +33,11 @@ const Sidebar = ({ handleLogout, user }) => {
         { text: 'Inventario', icon: <Inventory />, path: '/inventory' },
         { text: 'Punto de Venta', icon: <PointOfSale />, path: '/pos' },
     ];
+
+    // Remate: visible para admin y cajero (no para empleado)
+    if (user?.rol === 'admin' || user?.rol === 'cajero') {
+        menuItems.push({ text: 'Remate', icon: <Sell />, path: '/remate' });
+    }
 
     // 2. Menú de Administrador (Se agregan si el rol es admin)
     if (user?.rol === 'admin') {
