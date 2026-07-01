@@ -372,4 +372,31 @@ router.post('/discount', authenticateToken, checkAdminRole, logActivity('Aplicar
     }
 });
 
+router.delete('/discount', authenticateToken, checkAdminRole, logActivity('Quitar Descuento', 'productos'), async (req, res) => {
+    const { producto_ids } = req.body;
+
+    if (!Array.isArray(producto_ids) || producto_ids.length === 0) {
+        return res.status(400).json({ error: 'Selecciona al menos un producto.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        const result = await db.query(
+            `UPDATE productos
+             SET precio_oferta = NULL
+             WHERE id = ANY($1::int[])
+             RETURNING id`,
+            [producto_ids]
+        );
+
+        await db.query('COMMIT');
+        return res.json({ message: 'Descuento eliminado.', productos: result.rows });
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Error al quitar descuento:', error);
+        return res.status(500).json({ error: 'Error al quitar el descuento.' });
+    }
+});
+
 module.exports = router;
