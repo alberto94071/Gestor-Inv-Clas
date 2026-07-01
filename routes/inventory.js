@@ -302,23 +302,28 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
 // 9. RUTAS PARA ADMIN TOOLS
 // =====================================================================
 
-// Reporte de productos estancados (Corregido el JOIN)
-router.get('/reports/stagnant', authenticateToken, checkAdminRole, async (req, res) => {
+// Reporte de productos estancados (filtrable por cantidad de meses en stock)
+router.get('/reports/stagnant', authenticateToken, async (req, res) => {
+    const mesesParam = parseInt(req.query.meses);
+    const meses = Number.isInteger(mesesParam) && mesesParam > 0 ? mesesParam : 3;
+
     try {
-        // Unimos con la tabla 'inventario' para obtener la cantidad real
         const query = `
-            SELECT p.nombre, i.cantidad, p.fecha_creacion 
+            SELECT
+                p.id, p.nombre, p.marca, p.imagen_url, p.precio_venta, p.precio_oferta,
+                p.fecha_creacion, i.cantidad,
+                FLOOR(EXTRACT(EPOCH FROM (NOW() - p.fecha_creacion)) / 2592000)::int AS meses_en_stock
             FROM productos p
             JOIN inventario i ON p.id = i.producto_id
-            WHERE p.fecha_creacion < NOW() - INTERVAL '3 months' 
+            WHERE p.fecha_creacion < NOW() - ($1::text || ' months')::interval
             AND i.cantidad > 0
             ORDER BY p.fecha_creacion ASC
         `;
-        const result = await db.query(query);
+        const result = await db.query(query, [meses]);
         res.json(result.rows);
     } catch (err) {
         console.error("Error reporte:", err.message);
-        res.json([]); 
+        res.json([]);
     }
 });
 
