@@ -4,7 +4,8 @@ import API from '../api/axiosInstance';
 import {
     Container, Typography, CircularProgress, Alert, Paper,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Box, Chip, Avatar, TextField, TablePagination, Dialog, IconButton, Tooltip
+    Box, Chip, Avatar, TextField, TablePagination, Dialog, IconButton, Tooltip,
+    Checkbox, Button, Snackbar
 } from '@mui/material';
 import { Sell, ArrowBack, ArrowForward, Close, ImageNotSupported } from '@mui/icons-material';
 
@@ -28,6 +29,12 @@ const Remate = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [viewImageIndex, setViewImageIndex] = useState(null);
 
+    const [userRole, setUserRole] = useState('');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkPct, setBulkPct] = useState('');
+    const [applying, setApplying] = useState(false);
+    const [toast, setToast] = useState({ open: false, msg: '', severity: 'success' });
+
     const fetchStagnant = async (meses) => {
         setLoading(true);
         try {
@@ -49,6 +56,13 @@ const Remate = () => {
 
     useEffect(() => { fetchStagnant(mesesFiltro); setPage(0); }, [mesesFiltro]);
 
+    useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (userStr) setUserRole((JSON.parse(userStr).rol || '').toLowerCase());
+    }, []);
+
+    const isAdmin = userRole === 'admin';
+
     const handleCustomMeses = (e) => {
         if (e.key === 'Enter') {
             const val = parseInt(mesesPersonalizados);
@@ -60,6 +74,52 @@ const Remate = () => {
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
+    const applyDiscount = async (ids, pct) => {
+        const parsedPct = parseFloat(pct);
+        if (!ids.length || isNaN(parsedPct) || parsedPct <= 0 || parsedPct >= 100) {
+            setToast({ open: true, msg: 'Ingresa un porcentaje válido (1-99).', severity: 'error' });
+            return;
+        }
+        setApplying(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            await API.post('/inventory/discount', { producto_ids: ids, porcentaje: parsedPct }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setToast({ open: true, msg: 'Descuento aplicado correctamente.', severity: 'success' });
+            setSelectedIds([]);
+            setBulkPct('');
+            await fetchStagnant(mesesFiltro);
+        } catch (err) {
+            setToast({ open: true, msg: err.response?.data?.error || 'Error al aplicar el descuento.', severity: 'error' });
+        } finally {
+            setApplying(false);
+        }
+    };
+
+    const removeDiscount = async (ids) => {
+        if (!ids.length) return;
+        setApplying(true);
+        try {
+            const token = localStorage.getItem('authToken');
+            await API.delete('/inventory/discount', {
+                data: { producto_ids: ids },
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setToast({ open: true, msg: 'Descuento eliminado.', severity: 'success' });
+            setSelectedIds([]);
+            await fetchStagnant(mesesFiltro);
+        } catch (err) {
+            setToast({ open: true, msg: err.response?.data?.error || 'Error al quitar el descuento.', severity: 'error' });
+        } finally {
+            setApplying(false);
+        }
     };
 
     const getOptimizedImageUrl = (url, width = 100) => {
@@ -125,6 +185,7 @@ const Remate = () => {
                     <Table stickyHeader>
                         <TableHead>
                             <TableRow>
+                                {isAdmin && <TableCell padding="checkbox" />}
                                 <TableCell sx={{ fontWeight: 'bold' }}>Foto</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>Producto</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>Marca</TableCell>
@@ -139,6 +200,11 @@ const Remate = () => {
                                 const realIndex = products.indexOf(product);
                                 return (
                                     <TableRow key={product.id} hover sx={{ height: 90 }}>
+                                        {isAdmin && (
+                                            <TableCell padding="checkbox">
+                                                <Checkbox checked={selectedIds.includes(product.id)} onChange={() => toggleSelect(product.id)} />
+                                            </TableCell>
+                                        )}
                                         <TableCell>
                                             <Tooltip title="Ver detalle (Zoom)">
                                                 <Avatar
@@ -183,7 +249,7 @@ const Remate = () => {
                             })}
                             {visibleProducts.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                                    <TableCell colSpan={isAdmin ? 7 : 6} align="center" sx={{ py: 3 }}>
                                         No hay productos con esa antigüedad.
                                     </TableCell>
                                 </TableRow>
@@ -202,6 +268,26 @@ const Remate = () => {
                     onRowsPerPageChange={handleChangeRowsPerPage}
                     labelRowsPerPage="Filas por página"
                 />
+
+                {isAdmin && selectedIds.length > 0 && (
+                    <Box sx={{ p: 2, borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 2, bgcolor: '#fff8e1' }}>
+                        <Typography fontWeight="bold">{selectedIds.length} seleccionado(s)</Typography>
+                        <TextField
+                            size="small"
+                            label="% Descuento"
+                            type="number"
+                            value={bulkPct}
+                            onChange={(e) => setBulkPct(e.target.value)}
+                            sx={{ width: 140 }}
+                        />
+                        <Button variant="contained" color="warning" startIcon={<Sell />} disabled={applying} onClick={() => applyDiscount(selectedIds, bulkPct)}>
+                            Aplicar a {selectedIds.length} productos
+                        </Button>
+                        <Button variant="outlined" color="error" disabled={applying} onClick={() => removeDiscount(selectedIds)}>
+                            Quitar descuento a {selectedIds.length} productos
+                        </Button>
+                    </Box>
+                )}
             </Paper>
 
             <Dialog
@@ -249,6 +335,17 @@ const Remate = () => {
                     )}
                 </Box>
             </Dialog>
+
+            <Snackbar
+                open={toast.open}
+                autoHideDuration={3000}
+                onClose={() => setToast({ ...toast, open: false })}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setToast({ ...toast, open: false })} severity={toast.severity} sx={{ width: '100%' }}>
+                    {toast.msg}
+                </Alert>
+            </Snackbar>
         </Container>
     );
 };
