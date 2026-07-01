@@ -278,16 +278,16 @@ const InventoryDashboard = () => {
                                 const realIndex = filteredInventory.indexOf(product);
                                 
                                 return (
-                                <TableRow key={product.id} hover>
+                                <TableRow key={product.id} hover sx={{ height: 96 }}>
                                     <TableCell>
                                         <Tooltip title="Ver detalle (Zoom)">
-                                            <Avatar 
+                                            <Avatar
                                                 // 🟢 AQUI USAMOS LA URL OPTIMIZADA (Miniatura)
-                                                src={getOptimizedImageUrl(product.imagen_url, 100)} 
-                                                variant="rounded" 
+                                                src={getOptimizedImageUrl(product.imagen_url, 140)}
+                                                variant="rounded"
                                                 onClick={() => setViewImageIndex(realIndex)}
-                                                sx={{ 
-                                                    width: 50, height: 50, bgcolor: '#eee', border: '1px solid #ddd', cursor: 'pointer',
+                                                sx={{
+                                                    width: 70, height: 70, bgcolor: '#eee', border: '1px solid #ddd', cursor: 'pointer',
                                                     transition: 'transform 0.2s', '&:hover': { transform: 'scale(1.1)' }
                                                 }}
                                             >
@@ -298,7 +298,22 @@ const InventoryDashboard = () => {
                                     <TableCell><Typography fontWeight="bold" variant="body2">{product.nombre}</Typography></TableCell>
                                     <TableCell>{product.marca}</TableCell>
                                     <TableCell><Chip label={product.codigo_barras || "N/A"} size="small" variant="outlined" /></TableCell>
-                                    <TableCell align="right" sx={{ color: 'green', fontWeight: 'bold' }}>Q{Number(product.precio_venta).toFixed(2)}</TableCell>
+                                    <TableCell align="right">
+                                        {product.precio_oferta ? (
+                                            <Box>
+                                                <Typography variant="caption" sx={{ textDecoration: 'line-through', color: '#999', display: 'block' }}>
+                                                    Q{Number(product.precio_venta).toFixed(2)}
+                                                </Typography>
+                                                <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                    Q{Number(product.precio_oferta).toFixed(2)}
+                                                </Typography>
+                                            </Box>
+                                        ) : (
+                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                Q{Number(product.precio_venta).toFixed(2)}
+                                            </Typography>
+                                        )}
+                                    </TableCell>
                                     
                                     {/* 🟢 COLUMNA DE STOCK BLINDADA */}
                                     <TableCell align="center">
