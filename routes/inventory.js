@@ -338,4 +338,38 @@ router.delete('/sales/cleanup', authenticateToken, checkAdminRole, async (req, r
     }
 });
 
+// =====================================================================
+// 10. APLICAR / QUITAR DESCUENTO (REMATE)
+// =====================================================================
+router.post('/discount', authenticateToken, checkAdminRole, logActivity('Aplicar Descuento', 'productos'), async (req, res) => {
+    const { producto_ids, porcentaje } = req.body;
+
+    if (!Array.isArray(producto_ids) || producto_ids.length === 0) {
+        return res.status(400).json({ error: 'Selecciona al menos un producto.' });
+    }
+    const pct = parseFloat(porcentaje);
+    if (isNaN(pct) || pct <= 0 || pct >= 100) {
+        return res.status(400).json({ error: 'El porcentaje debe estar entre 1 y 99.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        const result = await db.query(
+            `UPDATE productos
+             SET precio_oferta = ROUND(precio_venta * (1 - $1 / 100.0), 2)
+             WHERE id = ANY($2::int[])
+             RETURNING id, precio_venta, precio_oferta`,
+            [pct, producto_ids]
+        );
+
+        await db.query('COMMIT');
+        return res.json({ message: 'Descuento aplicado.', productos: result.rows });
+    } catch (error) {
+        await db.query('ROLLBACK');
+        console.error('Error al aplicar descuento:', error);
+        return res.status(500).json({ error: 'Error al aplicar el descuento.' });
+    }
+});
+
 module.exports = router;
