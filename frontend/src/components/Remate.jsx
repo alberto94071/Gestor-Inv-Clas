@@ -4,9 +4,9 @@ import API from '../api/axiosInstance';
 import {
     Container, Typography, CircularProgress, Alert, Paper,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Box, Chip, Avatar, TextField, TablePagination
+    Box, Chip, Avatar, TextField, TablePagination, Dialog, IconButton, Tooltip
 } from '@mui/material';
-import { Sell } from '@mui/icons-material';
+import { Sell, ArrowBack, ArrowForward, Close, ImageNotSupported } from '@mui/icons-material';
 
 const MONTH_FILTERS = [3, 6, 12];
 
@@ -26,6 +26,7 @@ const Remate = () => {
 
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [viewImageIndex, setViewImageIndex] = useState(null);
 
     const fetchStagnant = async (meses) => {
         setLoading(true);
@@ -66,6 +67,22 @@ const Remate = () => {
         const parts = url.split('/upload/');
         return `${parts[0]}/upload/w_${width},c_limit,f_auto,q_auto/${parts[1]}`;
     };
+
+    const handleNextImage = () => viewImageIndex < products.length - 1 && setViewImageIndex(viewImageIndex + 1);
+    const handlePrevImage = () => viewImageIndex > 0 && setViewImageIndex(viewImageIndex - 1);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (viewImageIndex === null) return;
+            if (e.key === 'ArrowRight') handleNextImage();
+            if (e.key === 'ArrowLeft') handlePrevImage();
+            if (e.key === 'Escape') setViewImageIndex(null);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewImageIndex, products]);
+
+    const currentGalleryProduct = viewImageIndex !== null ? products[viewImageIndex] : null;
 
     if (loading) return <Container sx={{ mt: 4, textAlign: 'center' }}><CircularProgress /></Container>;
 
@@ -119,16 +136,20 @@ const Remate = () => {
                         <TableBody>
                             {visibleProducts.map((product) => {
                                 const badgeStyle = getAgeBadgeStyle(product.meses_en_stock);
+                                const realIndex = products.indexOf(product);
                                 return (
                                     <TableRow key={product.id} hover sx={{ height: 90 }}>
                                         <TableCell>
-                                            <Avatar
-                                                src={getOptimizedImageUrl(product.imagen_url, 140)}
-                                                variant="rounded"
-                                                sx={{ width: 80, height: 80, bgcolor: '#eee', border: '1px solid #ddd' }}
-                                            >
-                                                {product.nombre.charAt(0)}
-                                            </Avatar>
+                                            <Tooltip title="Ver detalle (Zoom)">
+                                                <Avatar
+                                                    src={getOptimizedImageUrl(product.imagen_url, 140)}
+                                                    variant="rounded"
+                                                    onClick={() => setViewImageIndex(realIndex)}
+                                                    sx={{ width: 80, height: 80, bgcolor: '#eee', border: '1px solid #ddd', cursor: 'pointer', transition: 'transform 0.2s', '&:hover': { transform: 'scale(1.1)' } }}
+                                                >
+                                                    {product.nombre.charAt(0)}
+                                                </Avatar>
+                                            </Tooltip>
                                         </TableCell>
                                         <TableCell><Typography fontWeight="bold" variant="body2">{product.nombre}</Typography></TableCell>
                                         <TableCell>{product.marca}</TableCell>
@@ -182,6 +203,52 @@ const Remate = () => {
                     labelRowsPerPage="Filas por página"
                 />
             </Paper>
+
+            <Dialog
+                open={viewImageIndex !== null}
+                onClose={() => setViewImageIndex(null)}
+                maxWidth="lg"
+                PaperProps={{ style: { backgroundColor: 'transparent', boxShadow: 'none', overflow: 'visible' } }}
+            >
+                <Box sx={{ position: 'relative', width: 'auto', maxWidth: '90vw', maxHeight: '90vh', bgcolor: 'white', borderRadius: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 24 }}>
+                    <IconButton onClick={() => setViewImageIndex(null)} sx={{ position: 'absolute', top: 10, right: 10, zIndex: 50, bgcolor: 'rgba(0,0,0,0.1)', '&:hover': { bgcolor: 'rgba(0,0,0,0.2)' } }}>
+                        <Close />
+                    </IconButton>
+
+                    {currentGalleryProduct && (
+                        <>
+                            <Box sx={{ width: '100%', minWidth: { xs: '300px', md: '500px' }, height: '60vh', display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f8f9fa', position: 'relative' }}>
+                                <IconButton onClick={handlePrevImage} disabled={viewImageIndex === 0} sx={{ position: 'absolute', left: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover': { bgcolor: 'white' }, display: viewImageIndex === 0 ? 'none' : 'flex' }}>
+                                    <ArrowBack />
+                                </IconButton>
+
+                                {currentGalleryProduct.imagen_url ? (
+                                    <img
+                                        src={getOptimizedImageUrl(currentGalleryProduct.imagen_url, 1000)}
+                                        alt="Detalle"
+                                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                    />
+                                ) : (
+                                    <Box display="flex" flexDirection="column" alignItems="center" color="text.secondary">
+                                        <ImageNotSupported sx={{ fontSize: 80, opacity: 0.3 }} />
+                                        <Typography variant="caption">Sin Imagen</Typography>
+                                    </Box>
+                                )}
+
+                                <IconButton onClick={handleNextImage} disabled={viewImageIndex === products.length - 1} sx={{ position: 'absolute', right: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover': { bgcolor: 'white' }, display: viewImageIndex === products.length - 1 ? 'none' : 'flex' }}>
+                                    <ArrowForward />
+                                </IconButton>
+                            </Box>
+
+                            <Box sx={{ p: 3, textAlign: 'center', borderTop: '1px solid #eee' }}>
+                                <Typography variant="h5" fontWeight="bold">{currentGalleryProduct.nombre}</Typography>
+                                <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 2 }}>{currentGalleryProduct.marca}</Typography>
+                                <Chip label={`${currentGalleryProduct.meses_en_stock} meses en stock`} sx={{ fontWeight: 'bold', ...getAgeBadgeStyle(currentGalleryProduct.meses_en_stock) }} />
+                            </Box>
+                        </>
+                    )}
+                </Box>
+            </Dialog>
         </Container>
     );
 };
