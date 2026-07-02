@@ -133,7 +133,8 @@ const PointOfSale = () => {
         if (existingItem) {
             updateQuantity(existingItem.id, existingItem.qty + 1, product.cantidad);
         } else {
-            setCart([...cart, { ...product, qty: 1 }]);
+            const precioEfectivo = product.precio_oferta ? Number(product.precio_oferta) : Number(product.precio_venta);
+            setCart([...cart, { ...product, precio_venta: precioEfectivo, qty: 1 }]);
         }
     };
 
