@@ -18,8 +18,19 @@ const Footer = () => {
                 {'© '}
                 {new Date().getFullYear()} 
                 {' | Desarrollado por '}
-                <Link color="inherit" href="#" sx={{ fontWeight: 'bold', textDecoration: 'none' }}>
-                    Rony Alberto Méndez Fuentes
+                <Link
+                    href="https://www.chronos-dev.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{
+                        fontWeight: 'bold',
+                        textDecoration: 'none',
+                        color: 'text.secondary',
+                        transition: 'color 0.2s',
+                        '&:hover': { color: 'primary.main' },
+                    }}
+                >
+                    Chronos-Dev
                 </Link>
                 {' |'}
             </Typography>
