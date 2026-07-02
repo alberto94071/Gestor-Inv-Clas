@@ -7,10 +7,10 @@ import {
     DialogTitle, DialogContent, DialogActions, DialogContentText, Avatar,
     Tooltip, Snackbar, TablePagination
 } from '@mui/material';
-import { 
-    Add, Search, Delete, Edit, Close, 
+import {
+    Add, Search, Delete, Edit, Close,
     ArrowBack, ArrowForward, ImageNotSupported,
-    ShoppingCart, Remove, AddCircle, RemoveCircle
+    ShoppingCart, Remove, AddCircle, RemoveCircle, Sell
 } from '@mui/icons-material';
 
 import CreateProductModal from './CreateProductModal'; 
@@ -47,6 +47,11 @@ const InventoryDashboard = () => {
 
     // 🟢 GALERÍA (Índice de navegación)
     const [viewImageIndex, setViewImageIndex] = useState(null);
+
+    // 🟢 DESCUENTO INDIVIDUAL (REMATE)
+    const [discountModalOpen, setDiscountModalOpen] = useState(false);
+    const [discountTarget, setDiscountTarget] = useState(null);
+    const [discountPct, setDiscountPct] = useState('');
 
     // Refs
     const searchInputRef = useRef(null);
@@ -176,7 +181,8 @@ const InventoryDashboard = () => {
         if (existingItem) {
             setToast({ open: true, msg: 'El producto ya está en el carrito POS', severity: 'info' });
         } else {
-            currentCart.push({ ...product, qty: 1 });
+            const precioEfectivo = product.precio_oferta ? Number(product.precio_oferta) : Number(product.precio_venta);
+            currentCart.push({ ...product, precio_venta: precioEfectivo, qty: 1 });
             localStorage.setItem('pos_cart_temp', JSON.stringify(currentCart));
             setToast({ open: true, msg: '¡Agregado al Carrito! (Ve al Punto de Venta)', severity: 'success' });
         }
@@ -220,6 +226,43 @@ const InventoryDashboard = () => {
             fetchInventory(); 
             setToast({ open: true, msg: 'Producto eliminado', severity: 'success' });
         } catch (err) { setToast({ open: true, msg: 'No se puede eliminar (tiene ventas registradas)', severity: 'error' }); setDeleteConfirmOpen(false); }
+    };
+
+    const handleOpenDiscount = (product) => { setDiscountTarget(product); setDiscountPct(''); setDiscountModalOpen(true); };
+
+    const handleApplyDiscount = async () => {
+        const pct = parseFloat(discountPct);
+        if (!discountTarget || isNaN(pct) || pct <= 0 || pct >= 100) {
+            setToast({ open: true, msg: 'Ingresa un porcentaje válido (1-99).', severity: 'error' });
+            return;
+        }
+        try {
+            const token = localStorage.getItem('authToken');
+            await API.post('/inventory/discount', { producto_ids: [discountTarget.id], porcentaje: pct }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setToast({ open: true, msg: 'Descuento aplicado.', severity: 'success' });
+            setDiscountModalOpen(false);
+            fetchInventory();
+        } catch (err) {
+            setToast({ open: true, msg: err.response?.data?.error || 'Error al aplicar el descuento.', severity: 'error' });
+        }
+    };
+
+    const handleRemoveDiscount = async () => {
+        if (!discountTarget) return;
+        try {
+            const token = localStorage.getItem('authToken');
+            await API.delete('/inventory/discount', {
+                data: { producto_ids: [discountTarget.id] },
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setToast({ open: true, msg: 'Descuento eliminado.', severity: 'success' });
+            setDiscountModalOpen(false);
+            fetchInventory();
+        } catch (err) {
+            setToast({ open: true, msg: err.response?.data?.error || 'Error al quitar el descuento.', severity: 'error' });
+        }
     };
 
     if (loading) return <Container sx={{ mt: 4, textAlign: 'center' }}><CircularProgress /></Container>;
@@ -343,6 +386,7 @@ const InventoryDashboard = () => {
 
                                     {userRole === 'admin' && (
                                         <TableCell align="center">
+                                            <IconButton color="warning" onClick={() => handleOpenDiscount(product)} size="small" sx={{ mr: 1 }}><Sell /></IconButton>
                                             <IconButton color="primary" onClick={() => handleOpenEdit(product)} size="small" sx={{ mr: 1 }}><Edit /></IconButton>
                                             <IconButton color="error" onClick={() => handleDeleteClick(product)} size="small"><Delete /></IconButton>
                                         </TableCell>
@@ -432,6 +476,40 @@ const InventoryDashboard = () => {
                 <DialogActions>
                     <Button onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
                     <Button onClick={confirmDelete} color="error" variant="contained">Eliminar</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* --- MODAL 5: DESCUENTO INDIVIDUAL --- */}
+            <Dialog open={discountModalOpen} onClose={() => setDiscountModalOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{ textAlign: 'center', fontWeight: 'bold' }}>Aplicar Descuento</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, mt: 1 }}>
+                        <Typography variant="h6">{discountTarget?.nombre}</Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            Precio actual: <strong>Q{Number(discountTarget?.precio_venta || 0).toFixed(2)}</strong>
+                            {discountTarget?.precio_oferta && (
+                                <> — Precio oferta: <strong>Q{Number(discountTarget.precio_oferta).toFixed(2)}</strong></>
+                            )}
+                        </Typography>
+                        <TextField
+                            autoFocus
+                            type="number"
+                            label="% Descuento"
+                            value={discountPct}
+                            onChange={(e) => setDiscountPct(e.target.value)}
+                            sx={{ width: '160px' }}
+                        />
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ justifyContent: 'center', pb: 3, gap: 2 }}>
+                    {discountTarget?.precio_oferta && (
+                        <Button onClick={handleRemoveDiscount} variant="outlined" color="error">
+                            Quitar Descuento
+                        </Button>
+                    )}
+                    <Button onClick={handleApplyDiscount} variant="contained" color="warning">
+                        Aplicar
+                    </Button>
                 </DialogActions>
             </Dialog>
 
