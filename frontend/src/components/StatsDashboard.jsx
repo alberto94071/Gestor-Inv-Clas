@@ -2,16 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import API from '../api/axiosInstance';
 
 // 1. IMPORTS DE COMPONENTES UI (Material UI)
-import { 
-    Container, Typography, CircularProgress, Grid, Card, CardContent, 
-    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton
+import {
+    Container, Typography, CircularProgress, Grid, Card, CardContent,
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button
 } from '@mui/material';
 
 // 2. IMPORTS DE ICONOS (Material Icons)
-import { 
-    Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon, 
-    ShowChart, Lock, Person, CalendarMonth, ArrowBack
+import {
+    Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon,
+    ShowChart, Lock, Person, CalendarMonth, ArrowBack, Sell
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 
 // 3. IMPORTS DE GRÁFICAS (Recharts)
 import { 
@@ -23,8 +24,10 @@ import {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#ff5722', '#3f51b5', '#e91e63'];
 
 const StatsDashboard = () => {
+    const navigate = useNavigate();
     const [inventory, setInventory] = useState([]);
     const [salesHistory, setSalesHistory] = useState([]);
+    const [stagnantCount, setStagnantCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     
@@ -68,6 +71,16 @@ const StatsDashboard = () => {
                     setSalesHistory(salesRes.data);
                 } catch (e) {
                     console.warn("Error historial:", e);
+                }
+
+                try {
+                    const stagnantRes = await API.get('/inventory/reports/stagnant', {
+                        params: { meses: 3 },
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setStagnantCount(Array.isArray(stagnantRes.data) ? stagnantRes.data.length : 0);
+                } catch (e) {
+                    console.warn("Error reporte estancados:", e);
                 }
 
             } catch (err) {
@@ -272,6 +285,24 @@ const StatsDashboard = () => {
                         </Card>
                     </Grid>
                 </Grid>
+
+                {/* ARTÍCULOS SIN MOVIMIENTO */}
+                {(userRole === 'admin' || userRole === 'cajero') && stagnantCount > 0 && (
+                    <Paper elevation={3} sx={{ p: 3, mb: 4, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, bgcolor: '#fff8e1', border: '1px solid #ffe082' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Avatar sx={{ bgcolor: '#fff3e0', color: '#ef6c00', width: 50, height: 50 }}><Warning /></Avatar>
+                            <Box>
+                                <Typography fontWeight="bold">Artículos sin movimiento</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {stagnantCount} producto{stagnantCount === 1 ? '' : 's'} llevan más de 3 meses en stock
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Button variant="contained" color="warning" startIcon={<Sell />} onClick={() => navigate('/remate')}>
+                            Ver en Remate
+                        </Button>
+                    </Paper>
+                )}
 
                 {/* TABS DE ADMIN */}
                 {userRole === 'admin' && (
