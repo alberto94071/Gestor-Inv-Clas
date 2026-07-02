@@ -93,8 +93,8 @@ router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edic
 
     try {
         const result = await db.query(
-            `UPDATE productos 
-             SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8
+            `UPDATE productos
+             SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8, precio_oferta=NULL
              WHERE id=$9 RETURNING *`,
             [nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url || null, id]
         );
