@@ -4,13 +4,14 @@ import API from '../api/axiosInstance';
 // 1. IMPORTS DE COMPONENTES UI (Material UI)
 import {
     Container, Typography, CircularProgress, Grid, Card, CardContent,
-    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button
+    Box, Avatar, Paper, Divider, Tabs, Tab, Alert, IconButton, Button,
+    Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 
 // 2. IMPORTS DE ICONOS (Material Icons)
 import {
     Inventory, AttachMoney, Warning, TrendingUp, BarChart as BarIcon,
-    ShowChart, Lock, Person, CalendarMonth, ArrowBack, Sell
+    ShowChart, Lock, Person, CalendarMonth, ArrowBack, Sell, DateRange
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -40,6 +41,10 @@ const StatsDashboard = () => {
     
     // Estado para ver detalle de un vendedor específico
     const [selectedVendor, setSelectedVendor] = useState(null);
+
+    // Estado para desglose mensual
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
 
     // Estado para montaje de gráficas
     const [mounted, setMounted] = useState(false);
@@ -157,6 +162,43 @@ const StatsDashboard = () => {
         
         const targetDetailVendor = isAdmin ? selectedVendor : userName;
 
+        // --- PREPARAR DESGLOSE MENSUAL POR SEMANAS ---
+        const availableYearsSet = new Set([currentYear]);
+        const monthlyBreakdownWeeks = [];
+        
+        // Determinar las semanas del mes seleccionado
+        if (isAdmin || userRole !== 'admin') { 
+           const firstDayOfMonth = new Date(selectedYear, selectedMonth, 1);
+           const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0);
+           
+           let currentWeekStart = new Date(firstDayOfMonth);
+           // Ajustar start al lunes
+           let dayOfW = currentWeekStart.getDay();
+           if (dayOfW === 0) dayOfW = 7;
+           currentWeekStart.setDate(currentWeekStart.getDate() - dayOfW + 1);
+
+           while (currentWeekStart <= lastDayOfMonth) {
+               const weekEnd = new Date(currentWeekStart);
+               weekEnd.setDate(currentWeekStart.getDate() + 6);
+               
+               const startShow = currentWeekStart < firstDayOfMonth ? firstDayOfMonth : currentWeekStart;
+               const endShow = weekEnd > lastDayOfMonth ? lastDayOfMonth : weekEnd;
+               
+               const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+               const daysDataMap = {};
+               dayNames.forEach(d => daysDataMap[d] = 0);
+
+               monthlyBreakdownWeeks.push({
+                   start: new Date(currentWeekStart), // real start of week (monday)
+                   end: new Date(weekEnd),
+                   label: `${startShow.getDate()} ${months[startShow.getMonth()]} - ${endShow.getDate()} ${months[endShow.getMonth()]}`,
+                   daysMap: daysDataMap
+               });
+               
+               currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+           }
+        }
+
         salesHistory.forEach(sale => {
             const rawDate = sale.fecha_hora || sale.fecha_venta;
             if (!rawDate) return;
@@ -195,6 +237,27 @@ const StatsDashboard = () => {
                 const monthName = months[date.getMonth()];
                 vendorDetailMap[monthName] += itemTotal;
             }
+
+            // 4. Lógica Desglose Mensual
+            availableYearsSet.add(date.getFullYear());
+            if (shouldCountForWeekly && date.getFullYear() === selectedYear && date.getMonth() === selectedMonth) {
+                const dayIndex = date.getDay(); 
+                const dNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                const dayName = dNames[dayIndex];
+                
+                for (let w = 0; w < monthlyBreakdownWeeks.length; w++) {
+                    const week = monthlyBreakdownWeeks[w];
+                    const wStart = new Date(week.start); wStart.setHours(0,0,0,0);
+                    const wEnd = new Date(week.end); wEnd.setHours(23,59,59,999);
+                    
+                    if (date >= wStart && date <= wEnd) {
+                        if (week.daysMap[dayName] !== undefined) {
+                            week.daysMap[dayName] += itemTotal;
+                        }
+                        break;
+                    }
+                }
+            }
         });
 
         const salesData = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(day => ({ day: day, total: daysMap[day] || 0 }));
@@ -202,8 +265,15 @@ const StatsDashboard = () => {
         const salesByMonth = months.map(m => ({ name: m, total: monthMap[m] }));
         const vendorMonthlyDetail = months.map(m => ({ name: m, total: vendorDetailMap[m] }));
 
-        return { totalProducts, totalValue, lowStockItems, chartData, salesData, salesByVendor, salesByMonth, vendorMonthlyDetail };
-    }, [inventory, salesHistory, userRole, userName, selectedVendor]);
+        // Finalizar array de semanas para el Desglose Mensual
+        const monthlyBreakdownData = monthlyBreakdownWeeks.map(week => {
+            const chartData = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(d => ({ day: d, total: week.daysMap[d] }));
+            return { label: week.label, chartData };
+        });
+        const availableYears = Array.from(availableYearsSet).sort((a,b) => b - a);
+
+        return { totalProducts, totalValue, lowStockItems, chartData, salesData, salesByVendor, salesByMonth, vendorMonthlyDetail, monthlyBreakdownData, availableYears };
+    }, [inventory, salesHistory, userRole, userName, selectedVendor, selectedYear, selectedMonth]);
 
     if (loading) return (
         <Container sx={{ mt: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -319,6 +389,7 @@ const StatsDashboard = () => {
                             <Tab icon={<ShowChart />} label="Resumen Semanal" />
                             <Tab icon={<Person />} label="Por Vendedor" />
                             <Tab icon={<CalendarMonth />} label="Mensual Global" />
+                            <Tab icon={<DateRange />} label="Desglose Mensual" />
                         </Tabs>
                     </Paper>
                 )}
@@ -491,6 +562,80 @@ const StatsDashboard = () => {
                                         </ResponsiveContainer>
                                     </div>
                                 </div>
+                            </Paper>
+                        </Grid>
+                    )}
+
+                    {/* 5. DESGLOSE MENSUAL POR SEMANAS (ADMIN - TAB 3) */}
+                    {userRole === 'admin' && tabIndex === 3 && (
+                        <Grid item xs={12}>
+                            <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <DateRange color="primary" /> Historial: Desglose Semanal
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', gap: 2 }}>
+                                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                                            <InputLabel>Año</InputLabel>
+                                            <Select
+                                                value={selectedYear}
+                                                label="Año"
+                                                onChange={(e) => setSelectedYear(e.target.value)}
+                                            >
+                                                {stats.availableYears && stats.availableYears.map(yr => (
+                                                    <MenuItem key={yr} value={yr}>{yr}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                        <FormControl size="small" sx={{ minWidth: 140 }}>
+                                            <InputLabel>Mes</InputLabel>
+                                            <Select
+                                                value={selectedMonth}
+                                                label="Mes"
+                                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                            >
+                                                {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, i) => (
+                                                    <MenuItem key={i} value={i}>{m}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    </Box>
+                                </Box>
+                                <Divider sx={{ mb: 3 }} />
+                                
+                                <Grid container spacing={3}>
+                                    {stats.monthlyBreakdownData && stats.monthlyBreakdownData.map((week, index) => (
+                                        <Grid item xs={12} lg={6} key={index}>
+                                            <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                                                <CardContent>
+                                                    <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: '#1976d2' }}>
+                                                        Semana {index + 1}: {week.label}
+                                                    </Typography>
+                                                    <div style={{ width: '100%', height: 250, overflowX: 'auto', overflowY: 'hidden' }}> 
+                                                        <div style={{ minWidth: '400px', height: '100%' }}>
+                                                            {mounted && (
+                                                                <ResponsiveContainer width="100%" height="100%">
+                                                                    <LineChart data={week.chartData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                                                        <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                                                                        <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Venta']} contentStyle={{borderRadius:'12px'}} />
+                                                                        <Line type="monotone" dataKey="total" stroke="#ff9800" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                                                                    </LineChart>
+                                                                </ResponsiveContainer>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+                                    ))}
+                                    {stats.monthlyBreakdownData && stats.monthlyBreakdownData.length === 0 && (
+                                        <Grid item xs={12}>
+                                            <Alert severity="info">No hay semanas disponibles para este mes.</Alert>
+                                        </Grid>
+                                    )}
+                                </Grid>
                             </Paper>
                         </Grid>
                     )}
