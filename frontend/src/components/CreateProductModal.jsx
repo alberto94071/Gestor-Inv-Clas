@@ -133,50 +133,64 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                 
                 <Grid container spacing={2} sx={{ mt: 1 }}>
-                    <Grid item xs={12} display="flex" flexDirection="column" alignItems="center" sx={{ mb: 2 }}>
-                        <Box sx={{ width: 150, height: 150, border: '2px dashed #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderRadius: 2, mb: 1, bgcolor: '#f5f5f5' }}>
+                    <Grid item xs={12} sm={4} display="flex" flexDirection="column" alignItems="center">
+                        <Box sx={{ width: 160, height: 160, border: '2px dashed #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderRadius: 2, mb: 1, bgcolor: '#f5f5f5' }}>
                             {preview ? (
                                 <img src={preview} alt="Prenda" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                                 <Typography variant="caption" color="textSecondary">Sin Foto</Typography>
                             )}
                         </Box>
-                        <Button variant="outlined" component="label" startIcon={<PhotoCamera />} disabled={loading}>
+                        <Button variant="outlined" component="label" startIcon={<PhotoCamera />} disabled={loading} size="small" fullWidth>
                             {loading ? "Subiendo..." : (isEditing ? "Cambiar Foto" : "Subir Foto")}
                             <input type="file" hidden accept="image/*" onChange={handleImageChange} />
                         </Button>
                     </Grid>
 
-                    <Grid item xs={12} sm={6}><TextField label="Nombre *" name="nombre" fullWidth value={formData.nombre} onChange={handleChange} /></Grid>
-                    <Grid item xs={12} sm={6}><TextField label="Marca" name="marca" fullWidth value={formData.marca} onChange={handleChange} /></Grid>
-                    <Grid item xs={12}><TextField label="Descripción" name="descripcion" fullWidth multiline rows={2} value={formData.descripcion} onChange={handleChange} /></Grid>
-                    <Grid item xs={6} sm={4}><TextField label="Precio (Q) *" name="precio_venta" type="number" fullWidth value={formData.precio_venta} onChange={handleChange} /></Grid>
-                    <Grid item xs={6} sm={4}><TextField label="Color" name="color" fullWidth value={formData.color} onChange={handleChange} /></Grid>
-                    
+                    <Grid item xs={12} sm={8}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}><TextField label="Nombre *" name="nombre" fullWidth value={formData.nombre} onChange={handleChange} /></Grid>
+                            <Grid item xs={12} sm={6}><TextField label="Marca" name="marca" fullWidth value={formData.marca} onChange={handleChange} /></Grid>
+                            
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Categoría</InputLabel>
+                                    <Select name="categoria" value={formData.categoria} onChange={handleChange} label="Categoría">
+                                        <MenuItem value=""><em>Ninguna</em></MenuItem>
+                                        {configCats.map(c => <MenuItem key={c.id} value={c.nombre}>{c.nombre}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth disabled={!formData.categoria || availableGeneros.length === 0}>
+                                    <InputLabel>Género</InputLabel>
+                                    <Select name="genero" value={formData.genero} onChange={handleChange} label="Género">
+                                        <MenuItem value=""><em>Seleccione</em></MenuItem>
+                                        {availableGeneros.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+
+                            <Grid item xs={12}>
+                                <TextField label="Descripción" name="descripcion" fullWidth multiline rows={2} value={formData.descripcion} onChange={handleChange} />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+
+                    <Grid item xs={12} sm={4}><TextField label="Precio (Q) *" name="precio_venta" type="number" fullWidth value={formData.precio_venta} onChange={handleChange} /></Grid>
+                    <Grid item xs={12} sm={4}><TextField label="Color" name="color" fullWidth value={formData.color} onChange={handleChange} /></Grid>
                     <Grid item xs={12} sm={4}>
-                        <FormControl fullWidth>
-                            <InputLabel>Categoría</InputLabel>
-                            <Select name="categoria" value={formData.categoria} onChange={handleChange} label="Categoría">
-                                <MenuItem value=""><em>Ninguna</em></MenuItem>
-                                {configCats.map(c => <MenuItem key={c.id} value={c.nombre}>{c.nombre}</MenuItem>)}
-                            </Select>
-                        </FormControl>
+                        <TextField 
+                            label="Código de Barras" name="codigo_barras" fullWidth value={formData.codigo_barras} onChange={handleChange} 
+                            helperText="Si vacío, se genera automático."
+                        />
                     </Grid>
 
-                    <Grid item xs={12} sm={6}>
-                        <FormControl fullWidth disabled={!formData.categoria || availableGeneros.length === 0}>
-                            <InputLabel>Género</InputLabel>
-                            <Select name="genero" value={formData.genero} onChange={handleChange} label="Género">
-                                <MenuItem value=""><em>Seleccione</em></MenuItem>
-                                {availableGeneros.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={12}>
                         {availableTallas.length > 0 ? (
-                            <Box>
-                                <Typography variant="caption" color="textSecondary" display="block" gutterBottom>Talla disponible (Click para seleccionar)</Typography>
+                            <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, bgcolor: '#fafafa' }}>
+                                <Typography variant="subtitle2" color="textSecondary" display="block" gutterBottom>Tallas de {formData.categoria} ({formData.genero}) - Haz clic para seleccionar:</Typography>
                                 <Box display="flex" flexWrap="wrap" gap={1}>
                                     {availableTallas.map(t => (
                                         <Chip 
@@ -185,20 +199,14 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
                                             clickable 
                                             color={formData.talla === t ? 'primary' : 'default'}
                                             onClick={() => setFormData(prev => ({ ...prev, talla: t }))}
+                                            sx={{ fontSize: '1rem', px: 1, py: 2.5, fontWeight: 'bold' }}
                                         />
                                     ))}
                                 </Box>
                             </Box>
                         ) : (
-                            <TextField label="Talla" name="talla" fullWidth value={formData.talla} onChange={handleChange} />
+                            <TextField label="Talla (Ej. S, M, 32, 40)" name="talla" fullWidth value={formData.talla} onChange={handleChange} />
                         )}
-                    </Grid>
-
-                    <Grid item xs={12}>
-                        <TextField 
-                            label="Código de Barras" name="codigo_barras" fullWidth value={formData.codigo_barras} onChange={handleChange} 
-                            helperText="Si lo dejas vacío, el sistema generará uno."
-                        />
                     </Grid>
                 </Grid>
             </DialogContent>
