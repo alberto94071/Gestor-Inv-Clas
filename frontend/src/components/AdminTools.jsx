@@ -112,12 +112,12 @@ const AdminTools = () => {
                 </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-                <Card elevation={4} sx={{ borderRadius: 3, height: '100%' }}>
-                    <CardActionArea onClick={() => setActiveView('mantenimiento')} sx={{ height: '100%', p: 3, textAlign: 'center' }}>
-                        <Build sx={{ fontSize: 60, color: '#4caf50', mb: 2 }} />
+                <Card elevation={4} sx={{ borderRadius: 3, height: '100%', opacity: 0.6 }}>
+                    <CardActionArea disabled sx={{ height: '100%', p: 3, textAlign: 'center' }}>
+                        <Build sx={{ fontSize: 60, color: '#9e9e9e', mb: 2 }} />
                         <Typography variant="h6" fontWeight="bold">Mantenimiento de BD</Typography>
                         <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                            Limpia el historial antiguo para liberar espacio en el sistema.
+                            (Inhabilitado temporalmente para preservar el historial)
                         </Typography>
                     </CardActionArea>
                 </Card>
@@ -248,9 +248,11 @@ const AdminTools = () => {
                     Esta opción elimina el historial de ventas con más de 1 mes de antigüedad. 
                     Esto te ayuda a liberar espacio en tu base de datos y acelerar significativamente 
                     los tiempos de carga del sistema.
+                    <br /><br />
+                    <strong>Nota:</strong> Esta función está bloqueada temporalmente para proteger el historial anual.
                 </Typography>
-                <Button variant="contained" color="warning" size="large" fullWidth onClick={handleCleanup} sx={{ py: 2, fontWeight: 'bold' }}>
-                    Ejecutar Limpieza Ahora
+                <Button variant="contained" color="warning" size="large" fullWidth disabled sx={{ py: 2, fontWeight: 'bold' }}>
+                    Ejecutar Limpieza Ahora (Bloqueado)
                 </Button>
             </Box>
         </Paper>
