@@ -1,15 +1,16 @@
 // frontend/src/components/Remate.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import API from '../api/axiosInstance';
 import {
     Container, Typography, CircularProgress, Alert, Paper,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     Box, Chip, Avatar, TextField, TablePagination, Dialog, IconButton, Tooltip,
-    Checkbox, Button, Snackbar
+    Checkbox, Button, Snackbar, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import { Sell, ArrowBack, ArrowForward, Close, ImageNotSupported } from '@mui/icons-material';
 
-const MONTH_FILTERS = [3, 6, 12];
+const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const getAgeBadgeStyle = (meses) => {
     if (meses >= 12) return { bgcolor: '#ffebee', color: '#c62828' }; // rojo
@@ -18,12 +19,20 @@ const getAgeBadgeStyle = (meses) => {
 };
 
 const Remate = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Obtener parametros de la URL
+    const query = new URLSearchParams(location.search);
+    const initialMonth = query.get('month') ? parseInt(query.get('month')) : new Date().getMonth() + 1;
+    const initialYear = query.get('year') ? parseInt(query.get('year')) : new Date().getFullYear();
+
+    const [selectedMonth, setSelectedMonth] = useState(initialMonth); // 1-12
+    const [selectedYear, setSelectedYear] = useState(initialYear);
+
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
-    const [mesesFiltro, setMesesFiltro] = useState(3);
-    const [mesesPersonalizados, setMesesPersonalizados] = useState('');
 
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -36,12 +45,12 @@ const Remate = () => {
     const [applying, setApplying] = useState(false);
     const [toast, setToast] = useState({ open: false, msg: '', severity: 'success' });
 
-    const fetchStagnant = async (meses) => {
+    const fetchStagnant = async (mes, anio) => {
         setLoading(true);
         try {
             const token = localStorage.getItem('authToken');
             const res = await API.get('/inventory/reports/stagnant', {
-                params: { meses },
+                params: { mes_ingreso: mes, anio_ingreso: anio },
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProducts(Array.isArray(res.data) ? res.data : []);
@@ -55,7 +64,15 @@ const Remate = () => {
         }
     };
 
-    useEffect(() => { fetchStagnant(mesesFiltro); setPage(0); }, [mesesFiltro]);
+    useEffect(() => { 
+        fetchStagnant(selectedMonth, selectedYear); 
+        setPage(0); 
+    }, [selectedMonth, selectedYear]);
+
+    // Sincronizar URL si cambian por el select
+    useEffect(() => {
+        navigate(`/remate?month=${selectedMonth}&year=${selectedYear}`, { replace: true });
+    }, [selectedMonth, selectedYear, navigate]);
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
@@ -63,13 +80,6 @@ const Remate = () => {
     }, []);
 
     const isAdmin = userRole === 'admin';
-
-    const handleCustomMeses = (e) => {
-        if (e.key === 'Enter') {
-            const val = parseInt(mesesPersonalizados);
-            if (!isNaN(val) && val > 0) setMesesFiltro(val);
-        }
-    };
 
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => {
@@ -96,7 +106,7 @@ const Remate = () => {
             setToast({ open: true, msg: 'Descuento aplicado correctamente.', severity: 'success' });
             setSelectedIds([]);
             setBulkPct('');
-            await fetchStagnant(mesesFiltro);
+            await fetchStagnant(selectedMonth, selectedYear);
         } catch (err) {
             setToast({ open: true, msg: err.response?.data?.error || 'Error al aplicar el descuento.', severity: 'error' });
         } finally {
@@ -115,7 +125,7 @@ const Remate = () => {
             });
             setToast({ open: true, msg: 'Descuento eliminado.', severity: 'success' });
             setSelectedIds([]);
-            await fetchStagnant(mesesFiltro);
+            await fetchStagnant(selectedMonth, selectedYear);
         } catch (err) {
             setToast({ open: true, msg: err.response?.data?.error || 'Error al quitar el descuento.', severity: 'error' });
         } finally {
@@ -161,24 +171,28 @@ const Remate = () => {
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
             <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                {MONTH_FILTERS.map((m) => (
-                    <Chip
-                        key={m}
-                        label={`+${m} meses`}
-                        color={mesesFiltro === m ? 'primary' : 'default'}
-                        onClick={() => { setMesesFiltro(m); setMesesPersonalizados(''); }}
-                        sx={{ fontWeight: 'bold', cursor: 'pointer' }}
-                    />
-                ))}
-                <TextField
-                    size="small"
-                    label="Meses personalizados"
-                    type="number"
-                    value={mesesPersonalizados}
-                    onChange={(e) => setMesesPersonalizados(e.target.value)}
-                    onKeyDown={handleCustomMeses}
-                    sx={{ width: 180 }}
-                />
+                <Typography variant="subtitle1" fontWeight="bold">Ingresados en:</Typography>
+                
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                    <InputLabel>Mes</InputLabel>
+                    <Select value={selectedMonth} label="Mes" onChange={(e) => setSelectedMonth(e.target.value)}>
+                        {MONTHS.map((m, idx) => (
+                            <MenuItem key={idx} value={idx + 1}>{m}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Año</InputLabel>
+                    <Select value={selectedYear} label="Año" onChange={(e) => setSelectedYear(e.target.value)}>
+                        {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map(yr => (
+                            <MenuItem key={yr} value={yr}>{yr}</MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
+                    Mostrando productos estancados del mes y año seleccionados.
+                </Typography>
             </Paper>
 
             <Paper sx={{ width: '100%', mb: 2, borderRadius: 3, overflow: 'hidden' }} elevation={3}>

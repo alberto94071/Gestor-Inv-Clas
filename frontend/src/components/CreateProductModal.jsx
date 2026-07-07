@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Dialog, DialogTitle, DialogContent, DialogActions, 
-    TextField, Button, Grid, Alert, Typography, Box 
+    TextField, Button, Grid, Alert, Typography, Box,
+    FormControl, InputLabel, Select, MenuItem, Chip
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import API from '../api/axiosInstance.js';
@@ -12,7 +13,8 @@ const UPLOAD_PRESET = "potter_presets";
 
 const initialState = {
     nombre: '', marca: '', descripcion: '', precio_venta: '',
-    talla: '', color: '', codigo_barras: '', imagen_url: '' 
+    talla: '', color: '', codigo_barras: '', imagen_url: '',
+    categoria: '', genero: ''
 };
 
 const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initialData }) => {
@@ -20,8 +22,20 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [preview, setPreview] = useState(null);
+    const [configCats, setConfigCats] = useState([]);
 
     const isEditing = Boolean(formData.id);
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const token = getToken();
+                const res = await API.get('/inventory/config/categorias', { headers: { Authorization: `Bearer ${token}` } });
+                setConfigCats(res.data || []);
+            } catch(e) {}
+        };
+        fetchConfig();
+    }, [getToken]);
 
     useEffect(() => {
         if (open) {
@@ -105,6 +119,11 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
         }
     };
 
+    const selectedCatConfig = configCats.find(c => c.nombre === formData.categoria);
+    const availableGeneros = selectedCatConfig ? (selectedCatConfig.generos || []) : [];
+    const availableTallas = (selectedCatConfig && selectedCatConfig.tallas && formData.genero) 
+                            ? (selectedCatConfig.tallas[formData.genero] || []) : [];
+
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
             <DialogTitle sx={{ bgcolor: isEditing ? '#ff9800' : '#2c3e50', color: 'white' }}>
@@ -132,8 +151,49 @@ const CreateProductModal = ({ open, handleClose, fetchInventory, getToken, initi
                     <Grid item xs={12} sm={6}><TextField label="Marca" name="marca" fullWidth value={formData.marca} onChange={handleChange} /></Grid>
                     <Grid item xs={12}><TextField label="Descripción" name="descripcion" fullWidth multiline rows={2} value={formData.descripcion} onChange={handleChange} /></Grid>
                     <Grid item xs={6} sm={4}><TextField label="Precio (Q) *" name="precio_venta" type="number" fullWidth value={formData.precio_venta} onChange={handleChange} /></Grid>
-                    <Grid item xs={6} sm={4}><TextField label="Talla" name="talla" fullWidth value={formData.talla} onChange={handleChange} /></Grid>
-                    <Grid item xs={12} sm={4}><TextField label="Color" name="color" fullWidth value={formData.color} onChange={handleChange} /></Grid>
+                    <Grid item xs={6} sm={4}><TextField label="Color" name="color" fullWidth value={formData.color} onChange={handleChange} /></Grid>
+                    
+                    <Grid item xs={12} sm={4}>
+                        <FormControl fullWidth>
+                            <InputLabel>Categoría</InputLabel>
+                            <Select name="categoria" value={formData.categoria} onChange={handleChange} label="Categoría">
+                                <MenuItem value=""><em>Ninguna</em></MenuItem>
+                                {configCats.map(c => <MenuItem key={c.id} value={c.nombre}>{c.nombre}</MenuItem>)}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth disabled={!formData.categoria || availableGeneros.length === 0}>
+                            <InputLabel>Género</InputLabel>
+                            <Select name="genero" value={formData.genero} onChange={handleChange} label="Género">
+                                <MenuItem value=""><em>Seleccione</em></MenuItem>
+                                {availableGeneros.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        {availableTallas.length > 0 ? (
+                            <Box>
+                                <Typography variant="caption" color="textSecondary" display="block" gutterBottom>Talla disponible (Click para seleccionar)</Typography>
+                                <Box display="flex" flexWrap="wrap" gap={1}>
+                                    {availableTallas.map(t => (
+                                        <Chip 
+                                            key={t} 
+                                            label={t} 
+                                            clickable 
+                                            color={formData.talla === t ? 'primary' : 'default'}
+                                            onClick={() => setFormData(prev => ({ ...prev, talla: t }))}
+                                        />
+                                    ))}
+                                </Box>
+                            </Box>
+                        ) : (
+                            <TextField label="Talla" name="talla" fullWidth value={formData.talla} onChange={handleChange} />
+                        )}
+                    </Grid>
+
                     <Grid item xs={12}>
                         <TextField 
                             label="Código de Barras" name="codigo_barras" fullWidth value={formData.codigo_barras} onChange={handleChange} 

@@ -24,16 +24,39 @@ const connectionConfig = {
 
 const pool = new Pool(connectionConfig);
 
+const runMigrations = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS configuracion_categorias (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(100) NOT NULL,
+                generos JSONB NOT NULL DEFAULT '[]',
+                tallas JSONB NOT NULL DEFAULT '{}'
+            );
+        `);
+        
+        await pool.query(`
+            ALTER TABLE productos 
+            ADD COLUMN IF NOT EXISTS categoria VARCHAR(100) DEFAULT 'Sin Categoría',
+            ADD COLUMN IF NOT EXISTS genero VARCHAR(50) DEFAULT 'General';
+        `);
+        console.log('✅ Migraciones de base de datos verificadas y ejecutadas.');
+    } catch (err) {
+        console.error('❌ Error ejecutando migraciones automáticas:', err);
+    }
+};
+
 pool.connect((err, client, release) => {
     if (err) {
-        return console.error('🔴 Error al adquirir cliente de base de datos:', err.stack);
+        return console.error('❌ Error al adquirir cliente de base de datos:', err.stack);
     }
     console.log('✅ Conexión exitosa a PostgreSQL!');
     if (isProduction) {
-        console.log('🚀 Modo: Producción (Render)');
+        console.log('✅ Modo: Producción (Render)');
     } else {
-        console.log('💻 Modo: Local');
+        console.log('✅ Modo: Local');
     }
+    runMigrations();
     release(); 
 });
 

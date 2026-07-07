@@ -5,6 +5,7 @@ import {
     TableBody, TableCell, TableHead, TableRow, Alert, CircularProgress 
 } from '@mui/material';
 import API from '../api/axiosInstance';
+import CategoriesManager from './CategoriesManager';
 
 const AdminTools = () => {
     // Inicialización segura del estado
@@ -222,6 +223,11 @@ const AdminTools = () => {
                             Limpiar Historial Antiguo
                         </Button>
                     </Paper>
+                </Grid>
+                
+                {/* 3. GESTIÓN DE CATEGORÍAS */}
+                <Grid item xs={12}>
+                    <CategoriesManager token={token} setMsg={setMsg} />
                 </Grid>
             </Grid>
         </Container>

@@ -12,7 +12,8 @@ const { generateUniqueBarcode } = require('../utils/barcodeGenerator');
 router.post('/products', authenticateToken, logActivity('Creación de Producto', 'productos'), async (req, res) => {
     const { 
         nombre, marca, descripcion, precio_venta, 
-        talla, color, codigo_barras, imagen_url, stock_inicial 
+        talla, color, codigo_barras, imagen_url, stock_inicial,
+        categoria, genero
     } = req.body;
 
     if (!nombre || !precio_venta) {
@@ -33,9 +34,9 @@ router.post('/products', authenticateToken, logActivity('Creación de Producto',
 
         const productResult = await db.query(
             `INSERT INTO productos 
-            (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-            [nombre, marca, descripcion, precio_venta, talla, color, finalCode, imagen_url || null]
+            (nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url, categoria, genero) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+            [nombre, marca, descripcion, precio_venta, talla, color, finalCode, imagen_url || null, categoria || 'Sin Categoría', genero || 'General']
         );
         const newProductId = productResult.rows[0].id;
 
@@ -71,6 +72,7 @@ router.get('/inventory', authenticateToken, async (req, res) => {
             SELECT
                 p.id, p.nombre, p.marca, p.descripcion, p.precio_venta, p.precio_oferta,
                 p.talla, p.color, p.codigo_barras, p.imagen_url, p.fecha_creacion,
+                p.categoria, p.genero,
                 COALESCE(i.cantidad, 0) as cantidad
             FROM productos p
             LEFT JOIN inventario i ON p.id = i.producto_id
@@ -89,14 +91,14 @@ router.get('/inventory', authenticateToken, async (req, res) => {
 // =====================================================================
 router.put('/products/:id', authenticateToken, checkAdminRole, logActivity('Edición de Producto', 'productos'), async (req, res) => {
     const { id } = req.params;
-    const { nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url } = req.body;
+    const { nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url, categoria, genero } = req.body;
 
     try {
         const result = await db.query(
             `UPDATE productos
-             SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8, precio_oferta=NULL
-             WHERE id=$9 RETURNING *`,
-            [nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url || null, id]
+             SET nombre=$1, marca=$2, descripcion=$3, precio_venta=$4, talla=$5, color=$6, codigo_barras=$7, imagen_url=$8, categoria=$9, genero=$10, precio_oferta=NULL
+             WHERE id=$11 RETURNING *`,
+            [nombre, marca, descripcion, precio_venta, talla, color, codigo_barras, imagen_url || null, categoria || 'Sin Categoría', genero || 'General', id]
         );
 
         if (result.rowCount === 0) return res.status(404).json({ error: "Producto no encontrado" });
@@ -230,6 +232,52 @@ router.delete('/products/:id', authenticateToken, checkAdminRole, logActivity('E
 // 7. REPORTES Y CONFIGURACIÓN
 // =====================================================================
 
+// --- Categorías Dinámicas ---
+router.get('/config/categorias', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM configuracion_categorias ORDER BY nombre ASC');
+        return res.json(result.rows);
+    } catch (error) {
+        console.error("Error obteniendo categorias:", error);
+        return res.json([]); 
+    }
+});
+
+router.post('/config/categorias', authenticateToken, checkAdminRole, async (req, res) => {
+    const { id, nombre, generos, tallas } = req.body;
+    try {
+        if (id) {
+            const result = await db.query(`
+                UPDATE configuracion_categorias 
+                SET nombre=$1, generos=$2, tallas=$3 
+                WHERE id=$4 RETURNING *`,
+                [nombre, JSON.stringify(generos || []), JSON.stringify(tallas || {}), id]
+            );
+            return res.json({ message: 'Categoría actualizada', categoria: result.rows[0] });
+        } else {
+            const result = await db.query(`
+                INSERT INTO configuracion_categorias (nombre, generos, tallas)
+                VALUES ($1, $2, $3) RETURNING *`,
+                [nombre, JSON.stringify(generos || []), JSON.stringify(tallas || {})]
+            );
+            return res.status(201).json({ message: 'Categoría creada', categoria: result.rows[0] });
+        }
+    } catch (error) {
+        console.error("Error guardando categoria:", error);
+        return res.status(500).json({ error: 'Error guardando categoría.' });
+    }
+});
+
+router.delete('/config/categorias/:id', authenticateToken, checkAdminRole, async (req, res) => {
+    try {
+        await db.query('DELETE FROM configuracion_categorias WHERE id = $1', [req.params.id]);
+        return res.json({ message: 'Categoría eliminada' });
+    } catch (error) {
+        return res.status(500).json({ error: 'Error eliminando categoría.' });
+    }
+});
+
+// --- Configuración General (Ticket) ---
 router.get('/config/ticket', authenticateToken, async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM configuracion LIMIT 1');
@@ -302,27 +350,56 @@ router.get('/sales-history', authenticateToken, async (req, res) => {
 // 9. RUTAS PARA ADMIN TOOLS
 // =====================================================================
 
-// Reporte de productos estancados (filtrable por cantidad de meses en stock)
+// Reporte de productos estancados (filtrable por cantidad de meses en stock o por mes especifico de ingreso)
 router.get('/reports/stagnant', authenticateToken, async (req, res) => {
+    // Si viene mes_ingreso y anio_ingreso, usamos lógica nueva
+    const mesIngreso = parseInt(req.query.mes_ingreso);
+    const anioIngreso = parseInt(req.query.anio_ingreso);
+    
+    // Si viene 'meses', es la lógica anterior, pero ya la reemplazamos en frontend. 
+    // Mantenemos soporte dual temporalmente si hace falta.
     const mesesParam = parseInt(req.query.meses);
-    const meses = Number.isInteger(mesesParam) && mesesParam > 0 ? mesesParam : 3;
 
     try {
-        const query = `
-            SELECT
-                p.id, p.nombre, p.marca, p.imagen_url, p.precio_venta, p.precio_oferta,
-                p.fecha_creacion, i.cantidad,
-                FLOOR(EXTRACT(EPOCH FROM (NOW() - p.fecha_creacion)) / 2592000)::int AS meses_en_stock
-            FROM productos p
-            JOIN inventario i ON p.id = i.producto_id
-            WHERE p.fecha_creacion < NOW() - ($1::text || ' months')::interval
-            AND i.cantidad > 0
-            ORDER BY p.fecha_creacion ASC
-        `;
-        const result = await db.query(query, [meses]);
+        let query;
+        let params;
+
+        if (!isNaN(mesIngreso) && !isNaN(anioIngreso)) {
+            // NUEVA LÓGICA: Filtrar por mes y año de creación y que tengan stock
+            query = `
+                SELECT
+                    p.id, p.nombre, p.marca, p.imagen_url, p.precio_venta, p.precio_oferta,
+                    p.fecha_creacion, i.cantidad, p.categoria, p.genero,
+                    FLOOR(EXTRACT(EPOCH FROM (NOW() - p.fecha_creacion)) / 2592000)::int AS meses_en_stock
+                FROM productos p
+                JOIN inventario i ON p.id = i.producto_id
+                WHERE EXTRACT(MONTH FROM p.fecha_creacion) = $1
+                  AND EXTRACT(YEAR FROM p.fecha_creacion) = $2
+                  AND i.cantidad > 0
+                ORDER BY p.fecha_creacion ASC
+            `;
+            params = [mesIngreso, anioIngreso];
+        } else {
+            // VIEJA LÓGICA: Antigüedad de N meses
+            const meses = Number.isInteger(mesesParam) && mesesParam > 0 ? mesesParam : 3;
+            query = `
+                SELECT
+                    p.id, p.nombre, p.marca, p.imagen_url, p.precio_venta, p.precio_oferta,
+                    p.fecha_creacion, i.cantidad, p.categoria, p.genero,
+                    FLOOR(EXTRACT(EPOCH FROM (NOW() - p.fecha_creacion)) / 2592000)::int AS meses_en_stock
+                FROM productos p
+                JOIN inventario i ON p.id = i.producto_id
+                WHERE p.fecha_creacion < NOW() - ($1::text || ' months')::interval
+                AND i.cantidad > 0
+                ORDER BY p.fecha_creacion ASC
+            `;
+            params = [meses];
+        }
+
+        const result = await db.query(query, params);
         res.json(result.rows);
     } catch (err) {
-        console.error("Error reporte:", err.message);
+        console.error("Error reporte stagnant:", err.message);
         res.json([]);
     }
 });

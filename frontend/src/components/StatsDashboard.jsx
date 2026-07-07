@@ -46,6 +46,9 @@ const StatsDashboard = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
 
+    // Estado para año global (Pestañas de Mensual Global y Vendedores)
+    const [globalYear, setGlobalYear] = useState(new Date().getFullYear());
+
     // Estado para montaje de gráficas
     const [mounted, setMounted] = useState(false);
 
@@ -153,7 +156,7 @@ const StatsDashboard = () => {
         const vendorMap = {};
         const monthMap = {};
         const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        const currentYear = new Date().getFullYear();
+        const currentYear = globalYear;
         months.forEach(m => monthMap[m] = 0);
 
         // Mapa para detalle mensual
@@ -273,7 +276,7 @@ const StatsDashboard = () => {
         const availableYears = Array.from(availableYearsSet).sort((a,b) => b - a);
 
         return { totalProducts, totalValue, lowStockItems, chartData, salesData, salesByVendor, salesByMonth, vendorMonthlyDetail, monthlyBreakdownData, availableYears };
-    }, [inventory, salesHistory, userRole, userName, selectedVendor, selectedYear, selectedMonth]);
+    }, [inventory, salesHistory, userRole, userName, selectedVendor, selectedYear, selectedMonth, globalYear]);
 
     if (loading) return (
         <Container sx={{ mt: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -544,8 +547,23 @@ const StatsDashboard = () => {
                     {userRole === 'admin' && tabIndex === 2 && (
                         <Grid item xs={12}>
                             <Paper elevation={3} sx={{ p: 3, borderRadius: 4 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Tendencia Global (Año Actual)</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Tendencia Global</Typography>
+                                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                                        <InputLabel>Año</InputLabel>
+                                        <Select
+                                            value={globalYear}
+                                            label="Año"
+                                            onChange={(e) => setGlobalYear(e.target.value)}
+                                        >
+                                            {stats.availableYears && stats.availableYears.map(yr => (
+                                                <MenuItem key={yr} value={yr}>{yr}</MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Box>
                                 <Divider sx={{ mb: 3 }} />
+                                <Alert severity="info" sx={{ mb: 2 }}>Haz click en la barra de un mes para ver sus productos estancados en el Remate.</Alert>
                                 <div style={{ width: '100%', height: 400, overflowX: 'auto', overflowY: 'hidden' }}>
                                     <div style={{ minWidth: '600px', height: '100%' }}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -555,7 +573,18 @@ const StatsDashboard = () => {
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} />
                                                 <YAxis axisLine={false} tickLine={false} />
                                                 <RechartsTooltip formatter={(value) => [formatCurrency(value), 'Total Global']} cursor={{fill: 'transparent'}} />
-                                                <Bar dataKey="total" barSize={50} radius={[4, 4, 0, 0]}>
+                                                <Bar 
+                                                    dataKey="total" 
+                                                    barSize={50} 
+                                                    radius={[4, 4, 0, 0]} 
+                                                    onClick={(data) => {
+                                                        if (!data) return;
+                                                        const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                                                        const monthIndex = months.indexOf(data.name) + 1; // 1-12
+                                                        navigate(`/remate?month=${monthIndex}&year=${globalYear}`);
+                                                    }}
+                                                    style={{ cursor: 'pointer' }}
+                                                >
                                                     {stats.salesByMonth.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                                                 </Bar>
                                             </BarChart>

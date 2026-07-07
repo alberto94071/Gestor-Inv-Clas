@@ -2,12 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-    Paper, Typography, Box, Avatar, CircularProgress, Alert, TextField, InputAdornment 
+    Paper, Typography, Box, Avatar, CircularProgress, Alert, TextField, InputAdornment, Chip 
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import API from '../api/axiosInstance';
 
 const InventoryList = ({ refreshTrigger }) => {
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const badgeColors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#ff9800'];
+
     const [inventory, setInventory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -79,6 +82,7 @@ const InventoryList = ({ refreshTrigger }) => {
                             <TableCell><strong>Producto</strong></TableCell>
                             <TableCell><strong>Marca</strong></TableCell>
                             <TableCell align="center"><strong>Talla/Color</strong></TableCell>
+                            <TableCell align="center"><strong>Ingreso</strong></TableCell>
                             <TableCell align="center"><strong>Stock</strong></TableCell>
                             <TableCell align="right"><strong>Precio</strong></TableCell>
                         </TableRow>
@@ -109,6 +113,22 @@ const InventoryList = ({ refreshTrigger }) => {
                                     <TableCell>{item.marca}</TableCell>
                                     <TableCell align="center">
                                         {item.talla} / {item.color}
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        {item.fecha_creacion ? (
+                                            <Chip 
+                                                label={monthNames[new Date(item.fecha_creacion).getMonth()]} 
+                                                size="small" 
+                                                sx={{ 
+                                                    bgcolor: badgeColors[new Date(item.fecha_creacion).getMonth()], 
+                                                    color: 'white', 
+                                                    fontWeight: 'bold',
+                                                    fontSize: '0.7rem'
+                                                }} 
+                                            />
+                                        ) : (
+                                            '-'
+                                        )}
                                     </TableCell>
                                     <TableCell align="center">
                                         <Box 
