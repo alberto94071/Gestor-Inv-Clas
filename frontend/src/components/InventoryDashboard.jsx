@@ -15,6 +15,12 @@ import {
 
 import CreateProductModal from './CreateProductModal'; 
 
+const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const badgeColors = [
+    '#3f51b5', '#e91e63', '#9c27b0', '#673ab7', '#009688', '#4caf50', 
+    '#ff9800', '#795548', '#607d8b', '#f44336', '#2196f3', '#ffeb3b'
+];
+
 const InventoryDashboard = () => {
     // --- ESTADOS ---
     const [inventory, setInventory] = useState([]);
@@ -47,6 +53,7 @@ const InventoryDashboard = () => {
 
     // 🟢 GALERÍA (Índice de navegación)
     const [viewImageIndex, setViewImageIndex] = useState(null);
+    const [selectedTalla, setSelectedTalla] = useState(null);
 
     // 🟢 DESCUENTO INDIVIDUAL (REMATE)
     const [discountModalOpen, setDiscountModalOpen] = useState(false);
@@ -310,6 +317,7 @@ const InventoryDashboard = () => {
                                 <TableCell sx={{ fontWeight: 'bold' }}>Producto</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>Marca</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold' }}>Código</TableCell>
+                                <TableCell align="center" sx={{ fontWeight: 'bold' }}>Ingreso</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>Precio</TableCell>
                                 <TableCell align="center" sx={{ fontWeight: 'bold' }}>Stock</TableCell>
                                 {userRole === 'admin' && <TableCell align="center" sx={{ fontWeight: 'bold' }}>Acciones</TableCell>}
@@ -341,6 +349,18 @@ const InventoryDashboard = () => {
                                     <TableCell><Typography fontWeight="bold" variant="body2">{product.nombre}</Typography></TableCell>
                                     <TableCell>{product.marca}</TableCell>
                                     <TableCell><Chip label={product.codigo_barras || "N/A"} size="small" variant="outlined" /></TableCell>
+                                    <TableCell align="center">
+                                        {product.fecha_creacion ? (
+                                            <Chip 
+                                                label={monthNames[new Date(product.fecha_creacion).getMonth()]} 
+                                                size="small" 
+                                                sx={{ 
+                                                    bgcolor: badgeColors[new Date(product.fecha_creacion).getMonth()], 
+                                                    color: 'white', fontWeight: 'bold', fontSize: '0.7rem'
+                                                }} 
+                                            />
+                                        ) : '-'}
+                                    </TableCell>
                                     <TableCell align="right">
                                         {product.precio_oferta ? (
                                             <Box>
@@ -521,14 +541,54 @@ const InventoryDashboard = () => {
                 PaperProps={{ style: { backgroundColor: 'transparent', boxShadow: 'none', overflow: 'visible' } }}
             >
                 <Box sx={{ position: 'relative', width: 'auto', maxWidth: '90vw', maxHeight: '90vh', bgcolor: 'white', borderRadius: 3, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: 24 }}>
-                    <IconButton onClick={() => setViewImageIndex(null)} sx={{ position: 'absolute', top: 10, right: 10, zIndex: 50, bgcolor: 'rgba(0,0,0,0.1)', '&:hover':{bgcolor:'rgba(0,0,0,0.2)'} }}>
+                    <IconButton onClick={() => { setViewImageIndex(null); setSelectedTalla(null); }} sx={{ position: 'absolute', top: 10, right: 10, zIndex: 50, bgcolor: 'rgba(0,0,0,0.1)', '&:hover':{bgcolor:'rgba(0,0,0,0.2)'} }}>
                         <Close />
                     </IconButton>
 
-                    {currentGalleryProduct && (
+                    {currentGalleryProduct && (() => {
+                        // Find all products with the same name, brand, color to group sizes
+                        const relatedProducts = inventory.filter(p => 
+                            p.nombre === currentGalleryProduct.nombre && 
+                            p.marca === currentGalleryProduct.marca && 
+                            p.color === currentGalleryProduct.color
+                        );
+                        
+                        // Extract unique sizes and their total quantities
+                        const sizeMap = {};
+                        relatedProducts.forEach(p => {
+                            if (!sizeMap[p.talla]) sizeMap[p.talla] = { id: p.id, qty: 0 };
+                            sizeMap[p.talla].qty += parseInt(p.cantidad || 0);
+                        });
+                        const availableSizes = Object.keys(sizeMap).sort();
+                        
+                        // Si no ha seleccionado talla y hay relacionadas, autoseleccionar la actual si tiene stock
+                        if (!selectedTalla && sizeMap[currentGalleryProduct.talla] && sizeMap[currentGalleryProduct.talla].qty > 0) {
+                            setTimeout(() => setSelectedTalla(currentGalleryProduct.talla), 0);
+                        }
+
+                        const handleAddCartSize = () => {
+                            if (!selectedTalla) return setToast({ open: true, msg: 'Selecciona una talla.', severity: 'warning' });
+                            const targetProduct = relatedProducts.find(p => p.talla === selectedTalla && p.cantidad > 0);
+                            if (!targetProduct) return setToast({ open: true, msg: 'Talla sin stock.', severity: 'error' });
+                            
+                            // Emular presionar F3 pasándole el producto exacto
+                            let cart = JSON.parse(localStorage.getItem('pos_persistent_cart')) || [];
+                            const existing = cart.find(i => i.id === targetProduct.id);
+                            if (existing) {
+                                setToast({ open: true, msg: 'El producto ya está en el carrito', severity: 'info' });
+                                return;
+                            }
+                            cart.push({ ...targetProduct, qty: 1 });
+                            localStorage.setItem('pos_persistent_cart', JSON.stringify(cart));
+                            setToast({ open: true, msg: '¡Agregado al Carrito!', severity: 'success' });
+                            setViewImageIndex(null);
+                            setSelectedTalla(null);
+                        };
+
+                        return (
                         <>
-                            <Box sx={{ width: '100%', minWidth: {xs: '300px', md: '500px'}, height: '60vh', display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f8f9fa', position: 'relative' }}>
-                                <IconButton onClick={handlePrevImage} disabled={viewImageIndex === 0} sx={{ position: 'absolute', left: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'}, display: viewImageIndex === 0 ? 'none' : 'flex' }}>
+                            <Box sx={{ width: '100%', minWidth: {xs: '300px', md: '500px'}, height: '55vh', display: 'flex', justifyContent: 'center', alignItems: 'center', bgcolor: '#f8f9fa', position: 'relative' }}>
+                                <IconButton onClick={() => { handlePrevImage(); setSelectedTalla(null); }} disabled={viewImageIndex === 0} sx={{ position: 'absolute', left: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'}, display: viewImageIndex === 0 ? 'none' : 'flex' }}>
                                     <ArrowBack />
                                 </IconButton>
 
@@ -545,28 +605,54 @@ const InventoryDashboard = () => {
                                     </Box>
                                 )}
 
-                                <IconButton onClick={handleNextImage} disabled={viewImageIndex === filteredInventory.length - 1} sx={{ position: 'absolute', right: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'}, display: viewImageIndex === filteredInventory.length - 1 ? 'none' : 'flex' }}>
+                                <IconButton onClick={() => { handleNextImage(); setSelectedTalla(null); }} disabled={viewImageIndex === filteredInventory.length - 1} sx={{ position: 'absolute', right: 10, bgcolor: 'rgba(255,255,255,0.7)', '&:hover':{bgcolor:'white'}, display: viewImageIndex === filteredInventory.length - 1 ? 'none' : 'flex' }}>
                                     <ArrowForward />
                                 </IconButton>
                             </Box>
                             
                             <Box sx={{ p: 3, textAlign: 'center', borderTop: '1px solid #eee' }}>
                                 <Typography variant="h5" fontWeight="bold">{currentGalleryProduct.nombre}</Typography>
-                                <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 2 }}>
-                                    {currentGalleryProduct.marca} - {currentGalleryProduct.codigo_barras}
+                                <Typography variant="subtitle1" color="textSecondary" sx={{ mb: 1 }}>
+                                    {currentGalleryProduct.marca} - {currentGalleryProduct.color || 'Sin color'} 
+                                    <Chip size="small" label={currentGalleryProduct.categoria || 'Sin Cat'} sx={{ ml: 1 }} />
                                 </Typography>
                                 
+                                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 2 }}>
+                                    <Typography variant="body2" fontWeight="bold">Tallas Disponibles:</Typography>
+                                    {availableSizes.length > 0 ? availableSizes.map(sz => {
+                                        const inStock = sizeMap[sz].qty > 0;
+                                        return (
+                                            <Chip 
+                                                key={sz} 
+                                                label={inStock ? sz : `${sz} (x)`} 
+                                                color={selectedTalla === sz ? "primary" : "default"}
+                                                variant={selectedTalla === sz ? "filled" : "outlined"}
+                                                onClick={() => inStock ? setSelectedTalla(sz) : null}
+                                                sx={{ 
+                                                    cursor: inStock ? 'pointer' : 'not-allowed', 
+                                                    opacity: inStock ? 1 : 0.5,
+                                                    textDecoration: inStock ? 'none' : 'line-through',
+                                                    fontWeight: 'bold'
+                                                }}
+                                            />
+                                        );
+                                    }) : (
+                                        <Typography variant="caption" color="error">No hay tallas configuradas</Typography>
+                                    )}
+                                </Box>
+
                                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
-                                    <Chip label={`Stock: ${currentGalleryProduct.cantidad}`} color={currentGalleryProduct.cantidad > 0 ? "success" : "error"} />
+                                    <Chip label={`Stock Total: ${Object.values(sizeMap).reduce((a,b)=>a+b.qty,0)}`} color="success" />
                                     <Chip label={`Precio: Q${Number(currentGalleryProduct.precio_venta).toFixed(2)}`} variant="outlined" />
                                 </Box>
 
-                                <Button variant="contained" color="secondary" size="large" startIcon={<ShoppingCart />} onClick={handleAddToCart} sx={{ px: 4, py: 1, borderRadius: 5, fontWeight: 'bold' }}>
-                                    Agregar al Carrito (F3)
+                                <Button variant="contained" color="secondary" size="large" startIcon={<ShoppingCart />} onClick={handleAddCartSize} disabled={!selectedTalla} sx={{ px: 4, py: 1, borderRadius: 5, fontWeight: 'bold' }}>
+                                    Agregar Talla Seleccionada al Carrito
                                 </Button>
                             </Box>
                         </>
-                    )}
+                        );
+                    })()}
                 </Box>
             </Dialog>
 
