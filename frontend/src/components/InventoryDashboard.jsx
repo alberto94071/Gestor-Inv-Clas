@@ -184,9 +184,15 @@ const InventoryDashboard = () => {
         const storedCart = localStorage.getItem('pos_cart_temp');
         let currentCart = storedCart ? JSON.parse(storedCart) : [];
 
-        const existingItem = currentCart.find(item => item.id === product.id);
-        if (existingItem) {
-            setToast({ open: true, msg: 'El producto ya está en el carrito POS', severity: 'info' });
+        const existingIndex = currentCart.findIndex(item => item.id === product.id);
+        if (existingIndex >= 0) {
+            if (currentCart[existingIndex].qty + 1 > Number(product.cantidad)) {
+                setToast({ open: true, msg: `Stock insuficiente. Máx: ${product.cantidad}`, severity: 'warning' });
+                return;
+            }
+            currentCart[existingIndex].qty += 1;
+            localStorage.setItem('pos_cart_temp', JSON.stringify(currentCart));
+            setToast({ open: true, msg: 'Cantidad aumentada en el carrito POS', severity: 'success' });
         } else {
             const precioEfectivo = product.precio_oferta ? Number(product.precio_oferta) : Number(product.precio_venta);
             currentCart.push({ ...product, precio_venta: precioEfectivo, qty: 1 });
@@ -546,11 +552,13 @@ const InventoryDashboard = () => {
                     </IconButton>
 
                     {currentGalleryProduct && (() => {
-                        // Find all products with the same name, brand, color to group sizes
-                        const relatedProducts = inventory.filter(p => 
-                            p.nombre === currentGalleryProduct.nombre && 
-                            p.marca === currentGalleryProduct.marca && 
-                            p.color === currentGalleryProduct.color
+                        // Find all products with the same name, brand, color AND price to group sizes.
+                        // El precio distingue variantes que comparten nombre (ej: Pines de Q15, Q25, Q35...)
+                        const relatedProducts = inventory.filter(p =>
+                            p.nombre === currentGalleryProduct.nombre &&
+                            p.marca === currentGalleryProduct.marca &&
+                            p.color === currentGalleryProduct.color &&
+                            Number(p.precio_venta) === Number(currentGalleryProduct.precio_venta)
                         );
                         
                         // Extract unique sizes and their total quantities
@@ -568,19 +576,28 @@ const InventoryDashboard = () => {
 
                         const handleAddCartSize = () => {
                             if (!selectedTalla) return setToast({ open: true, msg: 'Selecciona una talla.', severity: 'warning' });
-                            const targetProduct = relatedProducts.find(p => p.talla === selectedTalla && p.cantidad > 0);
+                            // Priorizamos el producto exacto que se está viendo en la galería
+                            const targetProduct = (currentGalleryProduct.talla === selectedTalla && currentGalleryProduct.cantidad > 0)
+                                ? currentGalleryProduct
+                                : relatedProducts.find(p => p.talla === selectedTalla && p.cantidad > 0);
                             if (!targetProduct) return setToast({ open: true, msg: 'Talla sin stock.', severity: 'error' });
-                            
+
                             // Emular presionar F3 pasándole el producto exacto
                             let cart = JSON.parse(localStorage.getItem('pos_persistent_cart')) || [];
-                            const existing = cart.find(i => i.id === targetProduct.id);
-                            if (existing) {
-                                setToast({ open: true, msg: 'El producto ya está en el carrito', severity: 'info' });
-                                return;
+                            const existingIndex = cart.findIndex(i => i.id === targetProduct.id);
+                            if (existingIndex >= 0) {
+                                if (cart[existingIndex].qty + 1 > Number(targetProduct.cantidad)) {
+                                    setToast({ open: true, msg: `Stock insuficiente. Máx: ${targetProduct.cantidad}`, severity: 'warning' });
+                                    return;
+                                }
+                                cart[existingIndex].qty += 1;
+                                setToast({ open: true, msg: 'Cantidad aumentada en el carrito', severity: 'success' });
+                            } else {
+                                const precioEfectivo = targetProduct.precio_oferta ? Number(targetProduct.precio_oferta) : Number(targetProduct.precio_venta);
+                                cart.push({ ...targetProduct, precio_venta: precioEfectivo, qty: 1 });
+                                setToast({ open: true, msg: '¡Agregado al Carrito!', severity: 'success' });
                             }
-                            cart.push({ ...targetProduct, qty: 1 });
                             localStorage.setItem('pos_persistent_cart', JSON.stringify(cart));
-                            setToast({ open: true, msg: '¡Agregado al Carrito!', severity: 'success' });
                             setViewImageIndex(null);
                             setSelectedTalla(null);
                         };
